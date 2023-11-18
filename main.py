@@ -160,37 +160,35 @@ def fitness(crossword):
 
 
 
-
-
 			if intersect is False:
 				print(f"		No intersection")
 
-				x = 1 if word.orientation == Orientation.Vertical else 0
-				y = 0 if word.orientation == Orientation.Vertical else 1
+				vert_w = word if word.orientation == Orientation.Vertical else word_
+				horiz_w = word_ if word.orientation == Orientation.Vertical else word
 
-				if word_.position[x] in (word.position[x] - 1, word.end[x] + 1):
-					if word_.position[y] <= word.position[y] <= word_.end[y]:
-						penalty -= word.length
+				if vert_w.position[0] in (horiz_w.position[0]-1, horiz_w.end[0]+1):
+					if vert_w.position[1] <= horiz_w.position[1] <= vert_w.end[1]:
 						print(f"			Too close")
-				if word.position[y] in (word_.position[y] - 1, word_.end[y] + 1):
-					if word_.position[x] <= word.position[x] <= word_.end[x]:
-						penalty -= word.length
+				if horiz_w.position[1] in (vert_w.position[1]-1, vert_w.end[1]+1):
+					if horiz_w.position[0] <= vert_w.position[0] <= horiz_w.end[0]:
 						print(f"			Too close")
+
 				continue
 
 
 
 			print(f"		We have an intersection!")
-			x = 1 if word.orientation == Orientation.Vertical else 0
-			y = 0 if word.orientation == Orientation.Vertical else 1
+			vert_w = word if word.orientation == Orientation.Vertical else word_
+			horiz_w = word_ if word.orientation == Orientation.Vertical else word
 
-			if word.string[intersect[x] - word.position[x]] == word_.string[intersect[y] - word_.position[y]]:
+			if vert_w.string[intersect[1] - vert_w.position[1]] == horiz_w.string[intersect[0] - horiz_w.position[0]]:
 				penalty += word.length + word.length * first_neighbour
 				first_neighbour = False
 				print(f"			Wow good intersection")
 			else:
 				penalty -= word.length
 				print(f"			Yuck bad intersection((((")
+
 
 
 			# if word.orientation == Orientation.Horizontal:
@@ -216,7 +214,7 @@ def fitness(crossword):
 		penalty -= word.length if first_neighbour else 0  # Not Connected graph
 		return penalty
 
-	score = 10000
+	score = 1000
 	for word in crossword:
 		print(f"Word: {word.string}, location: {word.position}")
 		score += count_penalty(word)
@@ -336,8 +334,10 @@ def input():
 
 if __name__ == '__main__':
 	words = input()
-	population = [initialization(words) for k in range(10)]
-	# for i in range(10):
-	# 	print_crossword(population[i])
-	print_crossword(population[0])
-	fitness(population[0])
+
+	num = 100
+
+	population = [initialization(words) for k in range(num)]
+	for i in range(num):
+		print_crossword(population[i])
+
