@@ -71,22 +71,9 @@ def find_intersection_point(word1, word2):
 	x2, y2 = word1.end
 	x3, y3 = word2.position
 	x4, y4 = word2.end
-	# For Horizontal Lines
-	if y1 == y2 and y3 == y4:
-		if y1 == y3:
-			x_overlap_start = max(x1, x3)
-			x_overlap_end = min(x2, x4)
-			if x_overlap_start <= x_overlap_end:
-				intersection_point = ((x_overlap_start + x_overlap_end) / 2, y1)
-				return intersection_point, False
-	# For Vertical Lines
-	elif x1 == x2 and x3 == x4:
-		if x1 == x3:
-			y_overlap_start = max(y1, y3)
-			y_overlap_end = min(y2, y4)
-			if y_overlap_start <= y_overlap_end:
-				intersection_point = (x1, (y_overlap_start + y_overlap_end) / 2)
-				return intersection_point, False
+
+	if y1 == y2 and y3 == y4 or x1 == x2 and x3 == x4:
+		return None
 
 	# For Lines with One Horizontal and One Vertical
 	elif (x1 == x2 and y3 == y4) or (y1 == y2 and x3 == x4):
@@ -95,13 +82,14 @@ def find_intersection_point(word1, word2):
 				return x1, y3
 		elif y1 == y2:
 			if min(y3, y4) <= y1 <= max(y3, y4) and min(x1, x2) <= x3 <= max(x1, x2):
-				return x3, y1, True
+				return x3, y1
+
 	# No intersection
-	return None
+	return False
 
 
-def fitness(crossword: Grid):
-	def overlapping_penalty(word):
+def fitness(crossword):
+	def count_penalty(word):
 		penalty = 0
 		first_neighbour = True
 		for word_ in crossword:
@@ -109,35 +97,134 @@ def fitness(crossword: Grid):
 				continue
 
 			intersect = find_intersection_point(word, word_)
+			print(f"	Compare word: {word_.string}")
+			print(f"		Intersection: {intersect}")
 
+
+
+
+			# TODO too close, but intersect with 3 word, so it's good
 			if intersect is None:
+				print(f"		Orientations the same")
+
+				x = 1 if word.orientation == Orientation.Vertical else 0
+				y = 0 if word.orientation == Orientation.Vertical else 1
+
+				if word.position[y] == word_.position[y]:
+					if (word_.position[x] <= word.position[x] <= word_.end[x]
+							or word_.position[x] <= word.end[x] <= word_.end[x]):
+						penalty -= word.length
+						print(f"			Overlapping!")
+					elif word.position[x] - 1 == word_.end[x] or word.end[x] + 1 == word_.position[x]:
+						penalty -= word.length
+						print(f"			Too close")
+				else:
+					if word.position[y] in (word_.position[y] + 1, word_.position[y] - 1):
+						if (word_.position[x] <= word.position[x] <= word_.end[x]
+								or word.position[x] <= word_.position[x] <= word.end[x]):
+							print(f"			Too close")
+
+				# if word.orientation == word_.orientation == Orientation.Vertical:
+				# 	# If on the same line
+				# 	if word.position[0] == word_.position[0]:
+				# 		if (word_.position[1] <= word.position[1] <= word_.end[1]
+				# 				or word_.position[1] <= word.end[1] <= word_.end[1]):
+				# 			penalty -= word.length
+				# 			print(f"			Overlapping!")
+				# 		elif word.position[1] - 1 == word_.end[1] or word.end[1] + 1 == word_.position[1]:
+				# 			penalty -= word.length
+				# 			print(f"			Too close")
+				# 	else:
+				# 		if word.position[0] in (word_.position[0] + 1, word_.position[0] - 1):
+				# 			if (word_.position[1] <= word.position[1] <= word_.end[1]
+				# 					or word.position[1] <= word_.position[1] <= word.end[1]):
+				# 				print(f"			Too close")
+				#
+				# elif word.orientation == word_.orientation == Orientation.Horizontal:
+				# 	# If on the same line
+				# 	if word.position[1] == word_.position[1]:
+				# 		if (word_.position[0] <= word.position[0] <= word_.end[0]
+				# 				or word_.position[0] <= word.end[0] <= word_.end[0]):
+				# 			penalty -= word.length
+				# 			print(f"			Overlapping!")
+				# 		elif word.position[0] - 1 == word_.end[0] or word.end[0] + 1 == word_.position[0]:
+				# 			penalty -= word.length
+				# 			print(f"			Too close")
+				# 	else:
+				# 		if word.position[1] in (word_.position[1] + 1, word_.position[1] - 1):
+				# 			if (word_.position[0] <= word.position[0] <= word_.end[0]
+				# 					or word.position[0] <= word_.position[0] <= word.end[0]):
+				# 				print(f"			Too close")
+
 				continue
 
-			if not intersect[2]:
-				penalty -= word.length
+
+
+
+
+			if intersect is False:
+				print(f"		No intersection")
+
+				x = 1 if word.orientation == Orientation.Vertical else 0
+				y = 0 if word.orientation == Orientation.Vertical else 1
+
+				if word_.position[x] in (word.position[x] - 1, word.end[x] + 1):
+					if word_.position[y] <= word.position[y] <= word_.end[y]:
+						penalty -= word.length
+						print(f"			Too close")
+				if word.position[y] in (word_.position[y] - 1, word_.end[y] + 1):
+					if word_.position[x] <= word.position[x] <= word_.end[x]:
+						penalty -= word.length
+						print(f"			Too close")
+				continue
+
+
+
+			print(f"		We have an intersection!")
+			x = 1 if word.orientation == Orientation.Vertical else 0
+			y = 0 if word.orientation == Orientation.Vertical else 1
+
+			if word.string[intersect[x] - word.position[x]] == word_.string[intersect[y] - word_.position[y]]:
+				penalty += word.length + word.length * first_neighbour
+				first_neighbour = False
+				print(f"			Wow good intersection")
 			else:
-				if word.orientation == Orientation.Horizontal:
-					# FIXME check +-1
-					if word.string[intersect[0] - 1] == word_.string[intersect[1] - 1]:
-						penalty += word.length + word.length * first_neighbour
-						first_neighbour = False
-					else:
-						penalty -= word.length
-				else:
-					if word.string[intersect[1] - 1] == word_.string[intersect[0] - 1]:
-						penalty += word.length + word.length * first_neighbour
-						first_neighbour = False
-					else:
-						penalty -= word.length
-		penalty -= word.length if first_neighbour else 0 # Not Connected graph
+				penalty -= word.length
+				print(f"			Yuck bad intersection((((")
+
+
+			# if word.orientation == Orientation.Horizontal:
+			#
+			# 	if word.string[intersect[0] - word.position[0]] == word_.string[
+			# 		intersect[1] - word_.position[1]]:  # Valid intersection
+			# 		penalty += word.length + word.length * first_neighbour
+			# 		first_neighbour = False
+			# 		print(f"			Wow good intersection")
+			# 	else:
+			# 		penalty -= word.length
+			# 		print(f"			Yuck bad intersection((((")
+			# else:
+			# 	if word.string[intersect[1] - word.position[1]] == word_.string[
+			# 		intersect[0] - word_.position[0]]:  # Valid intersection
+			# 		penalty += word.length + word.length * first_neighbour
+			# 		first_neighbour = False
+			# 		print(f"			Wow good intersection")
+			# 	else:
+			# 		penalty -= word.length
+			# 		print(f"			Yuck bad intersection((((")
+
+		penalty -= word.length if first_neighbour else 0  # Not Connected graph
 		return penalty
 
 	score = 10000
-	for word in crossword.words:
-		score += overlapping_penalty(word)
+	for word in crossword:
+		print(f"Word: {word.string}, location: {word.position}")
+		score += count_penalty(word)
+	print(score)
 
-	# No parallel words
-	print("TODO")
+
+# No parallel words
+# print("TODO")
 
 
 def mutation(individual):
@@ -149,7 +236,9 @@ def mutation(individual):
 		x = random.randint(0, META.grid_size - 1)
 		y = random.randint(0, META.grid_size - individual.length)
 	individual.position = (x, y)
-	#TODO: Should we check?
+
+
+# TODO: Should we check?
 
 
 def crossover(parent1, parent2):
@@ -248,5 +337,7 @@ def input():
 if __name__ == '__main__':
 	words = input()
 	population = [initialization(words) for k in range(10)]
-	for i in range(10):
-		print_crossword(population[i])
+	# for i in range(10):
+	# 	print_crossword(population[i])
+	print_crossword(population[0])
+	fitness(population[0])
