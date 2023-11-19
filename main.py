@@ -1,7 +1,8 @@
 import copy
 import random
+import numpy as np
 from enum import Enum
-
+import time
 
 class Orientation(Enum):
 	Horizontal = 0,
@@ -11,6 +12,11 @@ class Orientation(Enum):
 
 class META:
 	grid_size = 20
+	mutation_per = 0.1
+	crossover_coef = 0.8
+	old_best_coef = 1 - mutation_per - crossover_coef
+	generations = 100
+	gen_size = 1000
 
 
 class Word:
@@ -89,11 +95,16 @@ def find_intersection_point(word1, word2):
 
 def fitness(crossword):
 	def count_penalty(word):
+		timer = []
+
 		penalty = 0
 		first_neighbour = True
 		num_of_inter = 0
+
 		for word_ in crossword:
+			start = time.time()
 			if word_.string == word.string:
+				timer.append((time.time() - start))
 				continue
 
 			intersect = find_intersection_point(word, word_)
@@ -116,14 +127,15 @@ def fitness(crossword):
 					elif word.position[x] - 1 == word_.end[x] or word.end[x] + 1 == word_.position[x]:
 						penalty -= word.length
 						num_of_inter += 1
-					# print(f"			Too close")
+				# print(f"			Too close")
 				else:
 					if word.position[y] in (word_.position[y] + 1, word_.position[y] - 1):
 						if (word_.position[x] <= word.position[x] <= word_.end[x]
 								or word.position[x] <= word_.position[x] <= word.end[x]):
 							penalty -= word.length
 							num_of_inter += 1
-						# print(f"			Too close")
+				# print(f"			Too close")
+				timer.append((time.time() - start))
 				continue
 
 			if intersect is False:
@@ -135,12 +147,13 @@ def fitness(crossword):
 					if vert_w.position[1] <= horiz_w.position[1] <= vert_w.end[1]:
 						penalty -= word.length
 						num_of_inter += 1
-					# print(f"			Too close")
-				if horiz_w.position[1] in (vert_w.position[1] - 1, vert_w.end[1] + 1):
+				# print(f"			Too close")
+				elif horiz_w.position[1] in (vert_w.position[1] - 1, vert_w.end[1] + 1):
 					if horiz_w.position[0] <= vert_w.position[0] <= horiz_w.end[0]:
 						penalty -= word.length
 						num_of_inter += 1
-					# print(f"			Too close")
+				# print(f"			Too close")
+				timer.append((time.time() - start))
 				continue
 
 			# print(f"		We have an intersection!")
@@ -148,20 +161,26 @@ def fitness(crossword):
 			horiz_w = word_ if word.orientation == Orientation.Vertical else word
 
 			if vert_w.string[intersect[1] - vert_w.position[1]] == horiz_w.string[intersect[0] - horiz_w.position[0]]:
-				penalty += (word.length + word.length) * 10
+				penalty += (word.length + word.length)*5
 				num_of_inter += 1
 				first_neighbour = False
 			# print(f"			Wow good intersection")
 			else:
 				penalty -= word.length
 				num_of_inter += 1
-			# print(f"			Yuck bad intersection((((")
+		# print(f"			Yuck bad intersection((((")
 
-		penalty -= word.length if first_neighbour else 0  # Not Connected graph
-		penalty -= (len(crossword) - num_of_inter - 1)
+			penalty -= word.length if first_neighbour else 0  # Not Connected graph
+			first_neighbour = False
+			timer.append((time.time() - start))
+
+		penalty -= abs(5 - num_of_inter)*2
+
+		# print(f"Average per word: {sum(timer)/len(timer)}")
+
 		return penalty
 
-	score = 36 * len(crossword)
+	score = 50 * len(crossword)
 	for word in crossword:
 		# print(f"Word: {word.string}, location: {word.position}")
 		score += count_penalty(word)
@@ -169,19 +188,22 @@ def fitness(crossword):
 
 
 def mutation(individual):
-	individual.orientation = random.choice([Orientation.Horizontal, Orientation.Vertical])
-	if individual.orientation == Orientation.Horizontal:
-		x = random.randint(0, META.grid_size - individual.length)
+	rand_index = random.randint(0, len(individual)-1)
+	rand_gen = individual[rand_index]
+	rand_gen.orientation = random.choice([Orientation.Horizontal, Orientation.Vertical])
+	if rand_gen.orientation == Orientation.Horizontal:
+		x = random.randint(0, META.grid_size - rand_gen.length)
 		y = random.randint(0, META.grid_size - 1)
-		x_ = x + individual.length - 1
+		x_ = x + rand_gen.length - 1
 		y_ = y
 	else:
 		x = random.randint(0, META.grid_size - 1)
-		y = random.randint(0, META.grid_size - individual.length)
+		y = random.randint(0, META.grid_size - rand_gen.length)
 		x_ = x
-		y_ = y + individual.length - 1
-	individual.position = (x, y)
-	individual.end = (x_, y_)
+		y_ = y + rand_gen.length - 1
+	rand_gen.position = (x, y)
+	rand_gen.end = (x_, y_)
+	individual[rand_index] = rand_gen
 	return individual
 
 
@@ -197,15 +219,18 @@ def crossover(parent1, parent2):
 		return offspring1, offspring2
 
 	def two_points():
-		point1 = random.choice(len(parent1))
-		point2 = random.choice(len(parent2))
+		point1 = random.randint(0, len(parent1)//2)
+		point2 = random.randint(len(parent1)//2+1, len(parent2))
 
 		offspring1 = parent1[:point1] + parent2[point1:point2] + parent1[point2:]
 		offspring2 = parent2[:point1] + parent1[point1:point2] + parent2[point2:]
+		if len(offspring1) > 10 or len(offspring2) > 10:
+			print("ABOBA")
+			exit(1)
 		return offspring1, offspring2
 
 	def one_point():
-		point1 = random.choice(len(parent1))
+		point1 = random.choice(parent1)
 		offspring1 = parent1[:point1] + parent2[point1:]
 		offspring2 = parent2[:point1] + parent1[point1:]
 		return offspring1, offspring2
@@ -213,35 +238,63 @@ def crossover(parent1, parent2):
 	return two_points()
 
 
-def roulette_wheel_selection(words, fitness_arr):
+def roulette_wheel_selection(population, fitness_arr):
 	fitness_sum = sum(fitness_arr)
-	rand_val = random.randint(0, fitness_sum)
-	prev = index = 0
-	val = words[index]
-	while not (prev <= rand_val <= val):
+	a_bor = min(min(fitness_arr), fitness_sum)
+	b_bor = max(max(fitness_arr), fitness_sum)
+
+	rand_val = random.randint(a_bor, b_bor)
+	prev = 0
+	index = 0
+	val = fitness_arr[index]
+	while not (abs(prev) <= abs(rand_val) <= abs(val)):
 		index += 1
 		prev = val
-		val = words[index]
-	return words[index]
+		val += fitness_arr[index]
+	return population[index]
 
 
-def check_position(word, population: list[Word]) -> bool:
-	if word.position[0] < 0 or word.position[1] < 0 or (word.orientation == Orientation.Horizontal
-														and word.position[0] + word.length > META.grid_size) or (
-			word.orientation == Orientation.Vertical and word.position[1] + word.length > META.grid_size):
-		return False
+# def check_position(word, population: list[Word]) -> bool:
+# 	if word.position[0] < 0 or word.position[1] < 0 or (word.orientation == Orientation.Horizontal
+# 														and word.position[0] + word.length > META.grid_size) or (
+# 			word.orientation == Orientation.Vertical and word.position[1] + word.length > META.grid_size):
+# 		return False
+#
+# 	direction = word.orientation
+# 	x, y = word.position
+# 	for entry in population:
+# 		if direction == Orientation.Horizontal:
+# 			if y == entry.position[1] and entry.position[0] <= x < entry.position[0] + entry.length:
+# 				return False
+# 		else:
+# 			if x == entry.position[0] and entry.position[1] <= y < entry.position[1] + entry.length:
+# 				return False
+#
+# 	return True
 
-	direction = word.orientation
-	x, y = word.position
-	for entry in population:
-		if direction == Orientation.Horizontal:
-			if y == entry.position[1] and entry.position[0] <= x < entry.position[0] + entry.length:
-				return False
-		else:
-			if x == entry.position[0] and entry.position[1] <= y < entry.position[1] + entry.length:
-				return False
 
-	return True
+def next_generation(population):
+	fitness_arr = [fitness(individual) for individual in population]
+
+	new_population = []
+	# print(round(len(population) * META.crossover_coef/2))
+	# print(fitness_arr)
+	for i in range(round(len(population) * META.crossover_coef/2)):
+		# TODO check that parents not the same!
+		offspring1, offspring2 = crossover(roulette_wheel_selection(population, fitness_arr),
+										   roulette_wheel_selection(population, fitness_arr))
+		new_population.append(offspring1)
+		new_population.append(offspring2)
+	for j in range(round(len(population) * META.mutation_per)):
+		index = random.randint(0, len(population)-1)
+		new_population.append(mutation(population[index]))
+
+	n = round(len(population) * META.old_best_coef)
+	sorted_indices = np.argsort(fitness_arr)
+	result_indices = sorted_indices[-n:][::-1]
+	for i in range(n):
+		new_population.append(population[result_indices[i]])
+	return new_population
 
 
 def initialization(w: list[Word]):
@@ -264,21 +317,11 @@ def initialization(w: list[Word]):
 
 			word.position = (x, y)
 			word.end = (x_, y_)
-			if not check_position(word, population):
-				word.orientation = Orientation.NotUsed
-				word.position = None
+			# if not check_position(word, population):
+			# 	word.orientation = Orientation.NotUsed
+			# 	word.position = None
 		population.append(word)
 	return population
-
-
-def generation():
-	print("TODO")
-
-
-def print_grid(population: list[Word]):
-	population.sort()
-	for word in population:
-		print(f"{word.string}, {word.length}, {word.position}")
 
 
 def input():
@@ -286,15 +329,25 @@ def input():
 		return [Word(word.strip()) for word in file.readlines()]
 
 
+def best(population):
+	fitness_arr = np.asarray([fitness(individual) for individual in population])
+	ind = np.argmax(fitness_arr)
+	print(fitness_arr[ind])
+	print_crossword(population[ind])
+
+# TODO: check final condition
+# TODO check max gotness at each gen
 if __name__ == '__main__':
 	words = input()
+	population = [initialization(words) for k in range(META.gen_size)]
+	i = 0
+	for gen in range(META.generations):
+		print(i)
+		# for j in range(len(population)):
+		# 	print("Variant ", j)
+		# 	print_crossword(population[j])
+		i+=1
+		population = next_generation(population)
+	# print_crossword(population)
 
-	num = 1000
-	a = -500000
-	population = [initialization(words) for k in range(num)]
-	for i in range(num):
-		# print_crossword(population[i])
-		cur = fitness(population[i])
-		a = max(a, cur)
-		print(cur)
-	print(a)
+	best(population)
