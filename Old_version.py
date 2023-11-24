@@ -12,25 +12,19 @@ class Orientation(Enum):
 
 class META:
 	grid_size = 20
-	mutation_per = 0.05
+	mutation_per = 0.1
 	crossover_coef = 0.8
 	old_best_coef = 1 - mutation_per - crossover_coef
-	generations = 500
+	generations = 501
 	gen_size = 1000
-
 	basic_score = 3000
-
-	penalty_touch = 10
-	bad_intersection = 10
-	penalty_nothing = 10
-	penalty_overlap = 10
+	penalty = 10
 
 
 class Word:
 	def __init__(self, string: str):
 		self.string = string
 		self.length = len(self.string)
-		self.neighbours = {}  # Key - (char, num)  Value - Word
 		self.orientation = Orientation.NotUsed
 		self.position: tuple = None
 		self.end: tuple = None
@@ -81,9 +75,11 @@ def dfs(word: Word):
 			dfs(word_)
 
 
-def fitness(crossword):
-	# print_crossword(crossword)
-	penalty = META.basic_score
+def fitness(individual, flag):
+	crossword = copy.deepcopy(individual)
+	score = META.basic_score
+	if flag:
+		print("Start")
 	for word in crossword:
 		for word_ in crossword:
 			if word_.string == word.string:
@@ -93,14 +89,23 @@ def fitness(crossword):
 				par_1 = 1 * (word.orientation == Orientation.Vertical)
 				par_2 = 1 * (par_1 == 0)
 
-				if word.overlap(word_):  # Overlapping
-					penalty -= META.penalty_overlap
+				if word.overlap(word_):
+					score -= META.penalty
+					if flag:
+						print(f"Overlapping! {word.string}, {word_.string}")
 
 				elif word_.position[par_2] in (word.position[par_2] + 1, word.position[par_2] - 1):
 					if (word.position[par_1] <= word_.position[par_1] <= word.end[par_1]
 							or word.position[par_1] <= word_.end[par_1] <= word.end[par_1]):
 						# TODO too close, but intersect with 3 word, so it's good
-						penalty -= META.penalty_touch
+						score -= META.penalty
+						if flag:
+							print(f"Too Close! {word.string}, {word_.string}")
+				elif word_.position[par_2] == word.position[par_2]:
+					if word_.end[par_1] == word.position[par_1]-1 or word_.position[par_1] == word.end[par_1]+1:
+						score -= META.penalty
+						if flag:
+							print(f"The same to close!!!!! {word.string}, {word_.string}")
 
 			else:
 				intersect = find_intersection_point(word, word_)
@@ -110,26 +115,39 @@ def fitness(crossword):
 				if intersect:
 					if (vert_w.string[intersect[1] - vert_w.position[1]]
 							!= horiz_w.string[intersect[0] - horiz_w.position[0]]):
-						penalty -= META.bad_intersection
-					vert_w.intersections.append(horiz_w)
+						score -= META.penalty
+						if flag:
+							print(f"Bad Intersection! {word.string}, {word_.string}")
+					else:
+						word.intersections.append(word_)
+						# score += META.penalty
+						if flag:
+							print("Good!")
 				else:
 					if vert_w.position[0] in (horiz_w.position[0] - 1, horiz_w.end[0] + 1):
 						if vert_w.position[1] <= horiz_w.position[1] <= vert_w.end[1]:
-							penalty -= META.penalty_touch
+							score -= META.penalty
+							if flag:
+								print(f"ToO Close! {word.string}, {word_.string}")
 					elif horiz_w.position[1] in (vert_w.position[1] - 1, vert_w.end[1] + 1):
 						if horiz_w.position[0] <= vert_w.position[0] <= horiz_w.end[0]:
-							penalty -= META.penalty_touch
-	# print_crossword(crossword)
+							score -= META.penalty
+							if flag:
+								print(f"TOo close! {word.string}, {word_.string}")
+
 	dfs(crossword[0])
 	for word in crossword:
-		if word.visited:
-			word.visited = False
-		else:
-			penalty -= META.penalty_nothing
-	return max(0, penalty)
+		if not word.visited:
+			score -= META.penalty*3
+			if flag:
+				print(f"Alone! {word.string}")
+		# else:
+			# score += META.penalty*3
+	return max(0, score)
 
 
-def mutation(individual):
+def mutation(crossword):
+	individual = copy.deepcopy(crossword)
 	rand_index = random.randint(0, len(individual) - 1)
 	rand_gen = individual[rand_index]
 	rand_gen.orientation = random.choice([Orientation.Horizontal, Orientation.Vertical])
@@ -150,7 +168,7 @@ def mutation(individual):
 
 
 def crossover(parent1, parent2):
-	point1 = random.randint(0, len(parent1) - 1)
+	point1 = random.randint(1, len(parent1) - 2)
 	offspring1 = parent1[:point1] + parent2[point1:]
 	offspring2 = parent2[:point1] + parent1[point1:]
 	return offspring1, offspring2
@@ -169,25 +187,35 @@ def roulette_wheel_selection(population, fitness_arr):
 	return population[index]
 
 
-def next_generation(population):
-	fitness_arr = [fitness(individual) for individual in population]
+def max_ind(population, fitness_arr):
+	def get_n_max_indices(arr):
+		n = round(len(population) * META.old_best_coef)
+		sorted_indices = np.argsort(arr)
+		max_indices = sorted_indices[-n:]
+		return max_indices
+	best_ind = []
+	for i in get_n_max_indices(fitness_arr):
+		best_ind.append(population[i])
 
+	return best_ind
+
+
+def next_generation(population):
+	fitness_arr = [fitness(individual, False) for individual in population]
 	new_population = []
-	for i in range(round(len(population) * META.crossover_coef / 2)):
-		offspring1, offspring2 = crossover(roulette_wheel_selection(population, fitness_arr),
-										   roulette_wheel_selection(population, fitness_arr))
+	best_inds = max_ind(population, fitness_arr)
+	for _ in range(round(len(population) * META.crossover_coef / 2)):
+		offspring1, offspring2 = crossover(random.choice(best_inds), random.choice(best_inds))
 		new_population.append(offspring1)
 		new_population.append(offspring2)
+
+	for ind in best_inds:
+		new_population.append(ind)
 
 	for j in range(round(len(population) * META.mutation_per)):
 		index = random.randint(0, len(population) - 1)
 		new_population.append(mutation(population[index]))
 
-	n = round(len(population) * META.old_best_coef)
-	sorted_indices = np.argsort(fitness_arr)
-	result_indices = sorted_indices[-n:][::-1]
-	for i in range(n):
-		new_population.append(population[result_indices[i]])
 	return new_population
 
 
@@ -221,7 +249,6 @@ def print_crossword(population):
 	grid = []
 	for _ in range(META.grid_size):
 		grid.append(['-' for _ in range(META.grid_size)])
-
 	for word in population:
 		x, y = word.position
 		for i in range(word.length):
@@ -236,21 +263,20 @@ def print_crossword(population):
 	print("+" + "-" * (META.grid_size * 3 - 1) + "+")
 
 
-def best(population):
-	fitness_arr = np.asarray([fitness(individual) for individual in population])
+def best(population, i):
+	fitness_arr = np.asarray([fitness(individual, False) for individual in population])
 	ind = np.argmax(fitness_arr)
-	print(fitness_arr[ind])
+	print(f"Population: {i}, {fitness_arr[ind]}")
 	print_crossword(population[ind])
-	fitness(population[ind])
+	fitness(population[ind], True)
 
 
-# TODO: full graph
 if __name__ == '__main__':
 	words = input()
 	population = [initialization(words) for k in range(META.gen_size)]
 	i = 0
 	for gen in range(META.generations):
 		population = next_generation(population)
-		if i % 50 == 1:
-			best(population)
-		i+=1
+		if i % 50 == 0:
+			best(population, i)
+		i += 1
