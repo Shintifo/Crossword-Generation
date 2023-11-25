@@ -13,10 +13,10 @@ class Orientation(Enum):
 class META:
 	grid_size = 20
 	mutation_per = 0.2
-	crossover_coef = 0.6
-	old_best_coef = 0.2
+	crossover_coef = 0.7
+	old_best_coef = 0.1
 
-	generations = 1000
+	generations = 500
 	population_size = 1000
 
 	basic_score = 0
@@ -27,24 +27,15 @@ class Word:
 	def __init__(self, string: str):
 		self.string = string
 		self.length = len(self.string)
-		self.orientation = Orientation.NotUsed
+		self.intersections: list = []
+
+		self.orientation: Orientation = Orientation.NotUsed
 		self.position: tuple = None
 		self.end: tuple = None
-
-		self.visited = False
-		self.intersections = []
-
-	def __lt__(self, other):
-		if self.position[0] < other.position[0]:
-			return True
-		elif self.position[0] == other.position[0] and self.position[1] < other.position[1]:
-			return True
-		else:
-			return False
+		self.visited: bool = False
 
 	def overlap(self, other) -> bool:
-		par_1 = 1 * (self.orientation == Orientation.Vertical)
-		par_2 = 1 * (par_1 == 0)
+		par_1, par_2 = (1, 0) if self.orientation == Orientation.Vertical else (0, 1)
 
 		if (self.position[par_1] <= other.position[par_1] <= self.end[par_1]
 				or self.position[par_1] <= other.end[par_1] <= self.end[par_1]):
@@ -79,26 +70,19 @@ def fitness(individual, flag):
 				continue
 
 			if word_.orientation == word.orientation:
-				par_1 = 1 * (word.orientation == Orientation.Vertical)
-				par_2 = 1 * (par_1 == 0)
+				par_1, par_2 = (1, 0) if word.orientation == Orientation.Vertical else (0, 1)
 
 				if word.overlap(word_):
 					score -= META.penalty
-					if flag:
-						print(f"Overlapping! {word.string}, {word_.string}")
 
 				elif word_.position[par_2] in (word.position[par_2] + 1, word.position[par_2] - 1):
 					if (word.position[par_1] <= word_.position[par_1] <= word.end[par_1]
 							or word.position[par_1] <= word_.end[par_1] <= word.end[par_1]):
 						# TODO too close, but intersect with 3 word, so it's good
 						score -= META.penalty
-						if flag:
-							print(f"Too Close! {word.string}, {word_.string}")
 				elif word_.position[par_2] == word.position[par_2]:
 					if word_.end[par_1] == word.position[par_1] - 1 or word_.position[par_1] == word.end[par_1] + 1:
 						score -= META.penalty
-						if flag:
-							print(f"The same to close!!!!! {word.string}, {word_.string}")
 
 			else:
 				intersect = find_intersection_point(word, word_)
@@ -109,39 +93,34 @@ def fitness(individual, flag):
 					if (vert_w.string[intersect[1] - vert_w.position[1]]
 							!= horiz_w.string[intersect[0] - horiz_w.position[0]]):
 						score -= META.penalty
-						if flag:
-							print(f"Bad Intersection! {word.string}, {word_.string}")
 					else:
 						word.intersections.append(word_)
 						if flag:
-							print("Good!")
+							print(f"Good!, {word.string}, {word_.string}")
 				else:
 					if vert_w.position[0] in (horiz_w.position[0] - 1, horiz_w.end[0] + 1):
 						if vert_w.position[1] <= horiz_w.position[1] <= vert_w.end[1]:
 							score -= META.penalty
-							if flag:
-								print(f"ToO Close! {word.string}, {word_.string}")
 					elif horiz_w.position[1] in (vert_w.position[1] - 1, vert_w.end[1] + 1):
 						if horiz_w.position[0] <= vert_w.position[0] <= horiz_w.end[0]:
 							score -= META.penalty
-							if flag:
-								print(f"TOo close! {word.string}, {word_.string}")
 
-	dfs(crossword[0])
-	for word in crossword:
-		if not word.visited:
-			score -= META.penalty
-			if flag:
-				print(f"Alone! {word.string}")
+	for i in range(len(crossword)):
+		dfs(crossword[i])
+		for word in crossword:
+			if not word.visited or len(word.intersections) == 0:
+				score -= META.penalty
+				# if flag:
+				# 	print(f"Alone, {word.string}")
+			else:
+				word.visited = False
 	return score
 
 
 def mutation(crossword):
 	individual = copy.deepcopy(crossword)
-	rand_index = random.randint(0, len(individual) - 1)
-	rand_gen = individual[rand_index]
+	rand_gen = random.choice(individual)
 	random_position(rand_gen)
-	individual[rand_index] = rand_gen
 	return individual
 
 
@@ -162,33 +141,35 @@ def roulette_wheel_selection(population, fitness_arr):
 			return population[index]
 
 
-def max_ind(population, fitness_arr):
+def best_old_individuals(population, fitness_arr):
 	def get_n_max_indices(arr):
 		n = round(len(population) * META.old_best_coef)
 		sorted_indices = np.argsort(arr)
 		max_indices = sorted_indices[-n:]
 		return max_indices
 
-	best_ind = []
-	for i in get_n_max_indices(fitness_arr):
-		best_ind.append(population[i])
+	pop = copy.deepcopy(population)
+	fit_arr = copy.deepcopy(fitness_arr)
+	best_ind = [pop[i] for i in get_n_max_indices(fit_arr)]
 
 	return best_ind
 
 
 def next_generation(population):
 	fitness_arr = [fitness(individual, False) for individual in population]
+	best_old = best_old_individuals(population, fitness_arr)
 
-	new_population = max_ind(population, fitness_arr)
+	new_population = copy.deepcopy(best_old)
 
-	for _ in range(round(len(population) * META.crossover_coef / 2)):
-		offspring1, offspring2 = crossover(roulette_wheel_selection(population, fitness_arr), roulette_wheel_selection(population, fitness_arr))
+	for _ in range(round((len(population) * META.crossover_coef) / 2)):
+		offspring1, offspring2 = crossover(random.choice(best_old),random.choice(best_old))
+		# offspring1, offspring2 = crossover(roulette_wheel_selection(population, fitness_arr), roulette_wheel_selection(population, fitness_arr))
 		new_population.append(offspring1)
 		new_population.append(offspring2)
 
-	for j in range(round(len(population) * META.mutation_per)):
-		index = random.randint(0, len(population) - 1)
-		new_population.append(mutation(population[index]))
+	for _ in range(round(len(population) * META.mutation_per)):
+		individ = random.choice(population)
+		new_population.append(mutation(individ))
 
 	return new_population
 
@@ -215,7 +196,7 @@ def best(population, i):
 	fitness_arr = np.asarray([fitness(individual, False) for individual in population])
 	ind = np.argmax(fitness_arr)
 
-	if i % 100 == 0:
+	if i % 50 == 0:
 		print(fitness_arr[ind])
 		print_crossword(population[ind])
 		fitness(population[ind], True)
@@ -248,25 +229,23 @@ def random_position(word):
 
 def initialization(w: list[Word]):
 	words = copy.deepcopy(w)
-	population = []
 	for word in words:
 		random_position(word)
-		population.append(word)
-	return population
+	return words
 
 
-def input():
+def read_file():
 	with open("input.txt", "r") as file:
 		return [Word(word.strip()) for word in file.readlines()]
 
 
 if __name__ == '__main__':
-	words = input()
+	words = read_file()
 	population = [initialization(words) for k in range(META.population_size)]
 
 	for i in range(META.generations):
 		best_crossword, best_fitness = best(population, i)
-		print(i)
+		print(f"{i}, {len(population)}")
 		if best_fitness == 0:
 			print(f"Yay!, {i}")
 			print_crossword(best_crossword)
@@ -275,3 +254,5 @@ if __name__ == '__main__':
 		population = next_generation(population)
 
 	print("Not successful")
+	best_crossword, best_fitness = best(population, 0)
+	print_crossword(best_crossword)
