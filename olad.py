@@ -2,7 +2,6 @@ import copy
 import random
 import numpy as np
 from enum import Enum
-import matplotlib.pyplot as plt
 
 
 class Orientation(Enum):
@@ -13,15 +12,15 @@ class Orientation(Enum):
 
 class META:
 	grid_size = 20
-	mutation_per = 0.2
-	crossover_per = 0.65
+	mutation_per = 0.05
+	crossover_per = 0.8
 	old_best_per = 0.15
 
-	generations = 1000
+	generations = 5000
 	population_size = 1000
 
 	basic_score = 0
-	penalty = 1
+	penalty = 10
 
 
 class Word:
@@ -45,11 +44,12 @@ class Word:
 		return False
 
 
-def find_intersection_point(word1, word2):
+def find_intersection_point(word1, word2) -> tuple[int] | bool:
 	x1, y1 = word1.position
 	x2, y2 = word1.end
 	x3, y3 = word2.position
 	x4, y4 = word2.end
+
 	# For Lines with One Horizontal and One Vertical
 	if (x1 == x2 and y3 == y4) or (y1 == y2 and x3 == x4):
 		if x1 == x2:
@@ -59,13 +59,6 @@ def find_intersection_point(word1, word2):
 			if min(y3, y4) <= y1 <= max(y3, y4) and min(x1, x2) <= x3 <= max(x1, x2):
 				return x3, y1
 	return False
-
-
-def dfs(word: Word):
-	word.visited = True
-	for word_ in word.intersections.values():
-		if not word_.visited:
-			dfs(word_)
 
 
 def fitness(individual):
@@ -110,28 +103,30 @@ def fitness(individual):
 						if horiz_w.position[0] <= vert_w.position[0] <= horiz_w.end[0]:
 							score -= META.penalty
 
-	for word in crossword:
-		for word_ in crossword:
-			if word_.string == word.string or word_.orientation != word.orientation:
-				continue
+	# for word in crossword:
+	# 	for word_ in crossword:
+	# 		if word_.string == word.string:
+	# 			continue
+	#
+	# 		if word_.orientation == word.orientation:
+	# 			par_1, par_2 = (1, 0) if word.orientation == Orientation.Vertical else (0, 1)
+	#
+	# 			if word_.position[par_2] in (word.position[par_2] + 1, word.position[par_2] - 1):
+	# 				if word_.position[par_1] == word.end[par_1]:
+	# 					# 		Check that both of those positions are intersections
+	# 					if not word.intersections.get(word.end) or not word_.intersections.get(word_.position):
+	# 						score -= META.penalty
+	# 				elif word.position[par_1] == word_.end[par_1]:
+	# 					if not word.intersections.get(word.position) or not word_.intersections.get(word_.end):
+	# 						score -= META.penalty
 
-			par_1, par_2 = (1, 0) if word.orientation == Orientation.Vertical else (0, 1)
-
-			if word_.position[par_2] in (word.position[par_2] + 1, word.position[par_2] - 1):
-				if word_.position[par_1] == word.end[par_1]:
-					if not word.intersections.get(word.end) or not word_.intersections.get(word_.position):
-						score -= META.penalty
-				elif word.position[par_1] == word_.end[par_1]:
-					if not word.intersections.get(word.position) or not word_.intersections.get(word_.end):
-						score -= META.penalty
-
-	# for i in range(len(crossword)):
-	dfs(crossword[0])
-	for word in crossword:
-		if not word.visited or len(word.intersections) == 0:
-			score -= META.penalty
-		else:
-			word.visited = False
+	for i in range(len(crossword)):
+		dfs(crossword[i])
+		for word in crossword:
+			if not word.visited or len(word.intersections) == 0:
+				score -= META.penalty
+			else:
+				word.visited = False
 	return score
 
 
@@ -143,23 +138,31 @@ def mutation(crossword):
 
 
 def crossover(parent1, parent2):
-	# FIXME not working for 3 or less words
-	point1, point2 = sorted(random.sample(range(1, len(parent1) - 1), 2))
+	point1, point2 = sorted(random.sample(range(1, len(parent1) - 2), 2))
 	offspring1 = parent1[:point1] + parent2[point1:point2] + parent1[point2:]
 	offspring2 = parent2[:point1] + parent1[point1:point2] + parent2[point2:]
 	return offspring1, offspring2
 
 
+def roulette_selection(population, fitness_arr):
+	rand_val = random.randint(0, abs(sum(fitness_arr)))
+	summation = 0
+	for index, val in enumerate(fitness_arr):
+		summation += abs(val)
+		if rand_val <= summation:
+			return population[index]
+
+
 def best_old_individuals(population, fitness_arr):
-	def get_max_indices(arr):
+	def get_n_max_indices(arr):
 		n = round(len(population) * META.old_best_per)
 		sorted_indices = np.argsort(arr)
-		max_indices = sorted_indices[-n:][::-1]
-		return max_indices
+		max_indices = sorted_indices[-n:]
+		return max_indices[::-1]
 
-	pop = copy.deepcopy(population)
+	popul = copy.deepcopy(population)
 	fit_arr = copy.deepcopy(fitness_arr)
-	best_ind = [pop[i] for i in get_max_indices(fit_arr)]
+	best_ind = [popul[i] for i in get_n_max_indices(fit_arr)]
 
 	return best_ind
 
@@ -169,14 +172,18 @@ def next_generation(population, fitness_arr):
 	new_population = copy.deepcopy(best_old)
 
 	for _ in range(round((len(population) * META.crossover_per) / 2)):
-		offspring1, offspring2 = crossover(random.choice(best_old), random.choice(best_old))
+		# offspring1, offspring2 = crossover(random.choice(best_old), random.choice(best_old))
+		offspring1, offspring2 = crossover(roulette_selection(population, fitness_arr),
+										   roulette_selection(population, fitness_arr))
 		new_population.append(offspring1)
 		new_population.append(offspring2)
 
 	for _ in range(round(len(population) * META.mutation_per)):
 		new_population.append(mutation(random.choice(population)))
 
-	return new_population, fitness_arr
+	# random.shuffle(new_population)
+
+	return new_population
 
 
 def print_crossword(population):
@@ -198,14 +205,20 @@ def print_crossword(population):
 
 
 def best(population, i, fitness_arr):
-	fit_arr = copy.deepcopy(fitness_arr)
-	ind = np.argmax(fit_arr)
+	ind = np.argmax(fitness_arr)
 
-	if i % 20 == 0:
+	if i % 50 == 0:
+		print(fitness_arr[ind])
 		print_crossword(population[ind])
-		print(fit_arr[ind])
 
-	return population[ind], fit_arr[ind]
+	return population[ind], fitness_arr[ind]
+
+
+def dfs(word: Word):
+	word.visited = True
+	for word_ in word.intersections.values():
+		if not word_.visited:
+			dfs(word_)
 
 
 def random_position(word):
@@ -236,32 +249,43 @@ def read_file():
 		return [Word(word.strip()) for word in file.readlines()]
 
 
-if __name__ == '__main__':
-	x_data = []
-	y_data = []
+def test():
+	crossword = []
+	word1 = Word("aboba")
+	word1.orientation = Orientation.Horizontal
+	word1.position = (10, 10)
+	word1.end = (14, 10)
 
+	word2 = Word("avtoza")
+	word2.orientation = Orientation.Vertical
+	word2.position = (10, 5)
+	word2.end = (10, 10)
+
+	word3 = Word("bolgarka")
+	word3.orientation = Orientation.Vertical
+	word3.position = (11, 10)
+	word3.end = (11, 17)
+
+	crossword.append(word1)
+	crossword.append(word2)
+	crossword.append(word3)
+	print_crossword(crossword)
+	print(fitness(crossword))
+
+
+
+if __name__ == '__main__':
 	words = read_file()
 	population = [initialization(words) for k in range(META.population_size)]
 
 	for i in range(META.generations):
-		x_data.append(i)
-
 		fitness_arr = [fitness(individual) for individual in population]
 		best_crossword, best_fitness = best(population, i, fitness_arr)
-		population, fitness_arr = next_generation(population, fitness_arr)
-
+		print(f"{i}, {len(population)}")
 		if best_fitness == 0:
 			print(f"Yay!, {i}")
 			print_crossword(best_crossword)
 			exit(0)
-
-		avr_error = abs(sum(fitness_arr)) / len(fitness_arr)
-		y_data.append(avr_error)
-		print(f"{i}, {avr_error}")
-		if i % 10 == 0 and i != 0:
-			plt.xlabel('Generations')
-			plt.ylabel('Avr Error')
-			plt.scatter(x_data, y_data)
-			plt.show()
+		population = next_generation(population, fitness_arr)
 
 	print("Not successful")
