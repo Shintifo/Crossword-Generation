@@ -1,6 +1,5 @@
 import copy
 import random
-import numpy as np
 from enum import Enum
 import matplotlib.pyplot as plt
 
@@ -153,7 +152,7 @@ def crossover(parent1, parent2):
 def best_old_individuals(population, fitness_arr):
 	def get_max_indices(arr):
 		n = round(len(population) * META.old_best_per)
-		sorted_indices = np.argsort(arr)
+		sorted_indices = sorted(range(len(arr)), key=lambda k: arr[k])
 		max_indices = sorted_indices[-n:][::-1]
 		return max_indices
 
@@ -199,7 +198,7 @@ def print_crossword(population):
 
 def best(population, i, fitness_arr):
 	fit_arr = copy.deepcopy(fitness_arr)
-	ind = np.argmax(fit_arr)
+	ind = fit_arr.index(max(fit_arr))
 
 	if i % 20 == 0:
 		print_crossword(population[ind])
@@ -235,7 +234,7 @@ def read_file():
 	with open("input.txt", "r") as file:
 		return [Word(word.strip()) for word in file.readlines()]
 
-
+# TODO get rid of numpy
 if __name__ == '__main__':
 	x_data = []
 	y_data = []
