@@ -1,7 +1,9 @@
 import copy
+import os
 import random
 from enum import Enum
 import matplotlib.pyplot as plt
+import time
 
 
 class Orientation(Enum):
@@ -12,12 +14,12 @@ class Orientation(Enum):
 
 class META:
 	grid_size = 20
-	mutation_per = 0.25
+	mutation_per = 0.3
 	crossover_per = 0.6
-	old_best_per = 0.15
+	old_best_per = 0.1
 
-	generations = 600
-	population_size = 1000
+	generations = 1000
+	population_size = 500
 
 	basic_score = 0
 	penalty = 1
@@ -33,6 +35,10 @@ class Word:
 		self.position: tuple = None
 		self.end: tuple = None
 		self.visited: bool = False
+		self.valid = True
+
+	def __lt__(self, other):
+		return self.length > other.length
 
 	def overlap(self, other) -> bool:
 		par_1, par_2 = (1, 0) if self.orientation == Orientation.Vertical else (0, 1)
@@ -88,7 +94,6 @@ def fitness(individual):
 				elif word_.position[par_2] == word.position[par_2]:
 					if word_.end[par_1] == word.position[par_1] - 1 or word_.position[par_1] == word.end[par_1] + 1:
 						score -= META.penalty
-
 			else:
 				intersect = find_intersection_point(word, word_)
 				vert_w = word if word.orientation == Orientation.Vertical else word_
@@ -136,22 +141,34 @@ def fitness(individual):
 
 def mutation(crossword):
 	individual = copy.deepcopy(crossword)
-	rand_gen = random.choice(individual)
-	random_position(rand_gen)
+	for i in range(3):
+		rand_gen = random.choice(individual)
+		random_position(rand_gen)
 	return individual
 
 
 def crossover(parent1, parent2):
-	# FIXME not working for 3 or less words.txt
-	point1, point2 = sorted(random.sample(range(1, len(parent1) - 1), 2))
-	offspring1 = parent1[:point1] + parent2[point1:point2] + parent1[point2:]
-	offspring2 = parent2[:point1] + parent1[point1:point2] + parent2[point2:]
-	return offspring1, offspring2
+	def two_points():
+		# FIXME not working for 3 or less words.txt
+		point1, point2 = sorted(random.sample(range(1, len(parent1) - 1), 2))
+		offspring1 = parent1[:point1] + parent2[point1:point2] + parent1[point2:]
+		offspring2 = parent2[:point1] + parent1[point1:point2] + parent2[point2:]
+		return offspring1, offspring2
+
+	def mixed():
+		offspring1 = copy.deepcopy(parent1)
+		offspring2 = copy.deepcopy(parent2)
+		for index in range(len(parent1)):
+			if random.choice([True, False]):
+				offspring1[index], offspring2[index] = offspring2[index], offspring1[index]
+		return offspring1, offspring2
+
+	return mixed()
 
 
 def best_old_individuals(population, fitness_arr):
 	def get_max_indices(arr):
-		n = round(len(population) * META.old_best_per)
+		n = round(len(population) * 0.3)
 		sorted_indices = sorted(range(len(arr)), key=lambda k: arr[k])
 		max_indices = sorted_indices[-n:][::-1]
 		return max_indices
@@ -159,13 +176,14 @@ def best_old_individuals(population, fitness_arr):
 	pop = copy.deepcopy(population)
 	fit_arr = copy.deepcopy(fitness_arr)
 	best_ind = [pop[i] for i in get_max_indices(fit_arr)]
-
 	return best_ind
 
 
 def next_generation(population, fitness_arr):
 	best_old = best_old_individuals(population, fitness_arr)
-	new_population = copy.deepcopy(best_old)
+	n = round(len(population) * META.old_best_per)
+
+	new_population = copy.deepcopy(best_old[:n])
 
 	for _ in range(round((len(population) * META.crossover_per) / 2)):
 		offspring1, offspring2 = crossover(random.choice(best_old), random.choice(best_old))
@@ -175,7 +193,7 @@ def next_generation(population, fitness_arr):
 	for _ in range(round(len(population) * META.mutation_per)):
 		new_population.append(mutation(random.choice(population)))
 
-	return new_population, fitness_arr
+	return new_population
 
 
 def print_crossword(population):
@@ -196,14 +214,9 @@ def print_crossword(population):
 	print("+" + "-" * (META.grid_size * 3 - 1) + "+")
 
 
-def best(population, i, fitness_arr):
+def best(population, fitness_arr):
 	fit_arr = copy.deepcopy(fitness_arr)
 	ind = fit_arr.index(max(fit_arr))
-
-	# if i % 20 == 0:
-	# 	print_crossword(population[ind])
-	# 	print(fit_arr[ind])
-
 	return population[ind], fit_arr[ind]
 
 
@@ -223,11 +236,14 @@ def random_position(word):
 	word.end = (x_, y_)
 
 
-def initialization(w: list[Word]):
-	words = copy.deepcopy(w)
-	for word in words:
-		random_position(word)
-	return words
+def init_zero_population(w: list[Word]) -> list:
+	zero_population = []
+	for i in range(META.population_size):
+		words = copy.deepcopy(w)
+		for word in words:
+			random_position(word)
+		zero_population.append(words)
+	return zero_population
 
 
 def read_file(file_name):
@@ -235,47 +251,145 @@ def read_file(file_name):
 		return [Word(word.strip()) for word in file.readlines()]
 
 
-def output(file_name, solved, crossword):
-	with open(f"possible_output/{file_name}.txt", 'w') as out:
-		if solved:
-			for word in crossword:
-				out.write(f"{word.position[0]} {word.position[1]} {word.orientation.value[0]}")
-		else:
-			out.write("Not successful")
+# def output(file_name, solved, crossword):
+# 	with open(f"outputs/{file_name}.txt", 'w') as out:
+# 		if solved:
+# 			for word in crossword:
+# 				out.write(f"{word.position[0]} {word.position[1]} {word.orientation.value[0]}")
+# 		else:
+# 			out.write("Not successful")
 
 
-def solve(file_name, file_num):
-	x_data = []
-	y_data = []
-	print(f"File {file_num}")
+# def solve(file_name):
+# 	words = read_file(file_name)
+# 	print(f"Words: {len(words)}", end="  ")
+# 	population = init_zero_population(words)
+# 	x_data = []
+# 	y_data = []
+#
+# 	loss_arr = []
+#
+# 	for generation in range(META.generations):
+# 		fitness_arr = [fitness(individual) for individual in population]
+# 		best_crossword, best_fitness = best(population, fitness_arr)
+# 		population = next_generation(population, fitness_arr)
+#
+# 		if best_fitness == 0:
+# 			plt.ylabel('Avr Loss')
+# 			plt.xlabel('Generations')
+# 			plt.scatter(x_data, y_data)
+# 			plt.show()
+# 			return True
+#
+# 		avr_loss = abs(sum(fitness_arr)) / len(fitness_arr)
+# 		loss_arr.append(avr_loss)
+#
+# 		x_data.append(generation)
+# 		y_data.append(avr_loss)
+#
+# 		if generation % 15 == 0:
+# 			plt.ylabel('Avr Loss')
+# 			plt.xlabel('Generations')
+# 			plt.scatter(x_data, y_data)
+# 			plt.show()
+#
+# 		if len(loss_arr) >= 40:
+# 			if loss_arr[-1] >= 10:
+# 				num = 40
+# 				threshold = 0.3
+# 			elif loss_arr[-1] >= 5:
+# 				num = 40
+# 				threshold = 0.3
+# 			else:
+# 				num = min(50, len(loss_arr))
+# 				threshold = 0.2
+# 			arr = [abs(loss_arr[i] - loss_arr[i - 1]) <= threshold for i in
+# 				   range(len(loss_arr) - num, len(loss_arr))]
+# 			if all(arr):
+# 				# print("Restart")
+# 				population = init_zero_population(words)
+#
+# 	plt.ylabel('Avr Loss')
+# 	plt.xlabel('Generations')
+# 	plt.scatter(x_data, y_data)
+# 	plt.show()
+# 	print("Bad", end="  ")
 
-	words = read_file(file_name)
-	population = [initialization(words) for k in range(META.population_size)]
 
-	for i in range(META.generations):
-		x_data.append(i)
+def create_new_population(best_crossword, w):
+	population = []
+	for _ in range(META.population_size):
+		crossword = copy.deepcopy(best_crossword)
+		word = copy.deepcopy(w)
+		random_position(word)
+		crossword.append(word)
+		population.append(crossword)
+	return population
 
-		fitness_arr = [fitness(individual) for individual in population]
-		best_crossword, best_fitness = best(population, i, fitness_arr)
-		population, fitness_arr = next_generation(population, fitness_arr)
 
-		if best_fitness == 0:
-			print(f"Yay!, {i}")
-			output(file_num, True, best_crossword)
-			print_crossword(best_crossword)
-			return True
+def add_new_word(population, new_word):
+	for crossword in population:
+		word = copy.deepcopy(new_word)
+		crossword.append(word)
+		random_position(crossword[-1])
+	return population
 
-		avr_error = abs(sum(fitness_arr)) / len(fitness_arr)
-		y_data.append(avr_error)
-		if i % 50 == 0:
-			print(f"	Generation: {i}, Error: {avr_error}")
-		if i % 50 == 0 and i != 0:
-			plt.xlabel('Generations')
-			plt.ylabel('Avr Error')
-			plt.scatter(x_data, y_data)
-			plt.show()
-		if avr_error > 15 and i == 150:
-			return False
 
-	print("Not successful")
-	return False
+def test_solve(file_name):
+	words = sorted(read_file(file_name))
+	print("Words:", len(words), end=" ")
+
+	while True:
+		index = 2
+		four_words = copy.deepcopy(words[:2])
+		population = init_zero_population(four_words)
+
+		generation = 0
+		while generation < META.generations:
+			fitness_arr = [fitness(individual) for individual in population]
+			best_crossword, best_fitness = best(population, fitness_arr)
+
+			population = next_generation(population, fitness_arr)
+			if best_fitness == 0:
+				if len(words) == len(population[0]):
+					return len(words), abs(sum(fitness_arr)) / len(fitness_arr)
+				generation = 0
+				new_word = copy.deepcopy(words[index])
+				population = create_new_population(population, new_word)
+
+			if generation > 200:
+				print("Again", end=" ")
+				break
+			generation += 1
+
+
+if __name__ == "__main__":
+	words_arr = []
+	loss_arr = []
+	time_arr = []
+
+	tik = time.time()
+	for i in os.listdir("inputs"):
+		timer = time.time()
+		words, loss = test_solve(f"inputs/{i}")
+		timer = time.time() - timer
+
+		loss_arr.append(loss)
+		words_arr.append(words)
+		time_arr.append(timer)
+
+		sec = str(int(timer) % 60)
+		if len(sec) == 1:
+			sec = "0" + sec
+		print(f"Time: {int(timer // 60)}:{sec}")
+	print("Total time: ", time.time() - tik)
+
+	plt.ylabel('Avr Loss')
+	plt.xlabel('Words')
+	plt.scatter(words_arr, loss_arr)
+	plt.show()
+
+	plt.ylabel('Time in sec')
+	plt.xlabel('Words')
+	plt.scatter(words_arr, time_arr)
+	plt.show()
