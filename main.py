@@ -24,6 +24,9 @@ class META:
 	basic_score = 0
 	penalty = 1
 
+	output_path = "outputs"
+	input_path = "inputs"
+
 
 class Word:
 	def __init__(self, string: str):
@@ -80,7 +83,6 @@ class Word:
 
 
 class Crossword:
-
 	def __init__(self, words):
 		self.words: list[Word] = words
 		self.words_num = len(self.words)
@@ -161,32 +163,20 @@ class Crossword:
 		rand_gen.random_position()
 		return Crossword(individual)
 
-	# TODO fix
 	def crossover(self, parent2) -> tuple[Word]:
 		def two_points():
-			# FIXME not working for 3 or less words.txt
-			point1, point2 = sorted(random.sample(range(1, len(self.words) - 1), 2))
+			point1, point2 = sorted(random.sample(range(0, len(self.words) - 1), 2))
 			offspring1 = Crossword(self.words[:point1] + parent2.words[point1:point2] + self.words[point2:])
 			offspring2 = Crossword(parent2.words[:point1] + self.words[point1:point2] + parent2.words[point2:])
 			return offspring1, offspring2
 
-		def mixed():
-			# Not working!
-			offspring1 = copy.deepcopy(self.words)
-			offspring2 = copy.deepcopy(parent2.words)
-			for index in range(self.words_num):
-				if random.choice([True, False]):
-					offspring1[index], offspring2[index] = offspring2[index], offspring1[index]
-			return offspring1, offspring2
-
 		def one_point():
-			# Not working!
 			point = random.randint(0, self.words_num - 1)
-			offspring1 = self.words[:point] + parent2[point:]
-			offspring2 = parent2[:point] + self.words[point:]
+			offspring1 = Crossword(self.words[:point] + parent2.words[point:])
+			offspring2 = Crossword(parent2.words[:point] + self.words[point:])
 			return offspring1, offspring2
 
-		return two_points()
+		return two_points() if self.words_num > 2 else one_point()
 
 	def print(self):
 		grid = []
@@ -208,6 +198,11 @@ class Crossword:
 	def insert_word(self, word: Word):
 		self.words.append(word)
 		self.words_num += 1
+
+	def output_solution(self, file_name):
+		with open(f"{META.output_path}/{file_name}", "w") as file:
+			for word in self.words:
+				file.write(f"{word.position[0]} {word.position[1]} {word.orientation.value}\n")
 
 
 def best_old_individuals(population: list[Crossword], fitness_arr: list[int]) -> list[Crossword]:
@@ -273,15 +268,16 @@ def create_new_population(best_crossword: Crossword, new_word: Word):
 
 
 def read_file(file_name) -> Crossword:
-	with open(file_name, "r") as file:
+	with open(f"{META.input_path}/{file_name}", "r") as file:
 		return [Word(word.strip()) for word in file.readlines()]
+
 
 def solve(file_name):
 	words = sorted(read_file(file_name))
 	print("Words:", len(words), end=" ")
 
 	while True:
-		index = 4
+		index = 2
 		initial_words_set = copy.deepcopy(words[:index])
 		population = init_zero_population(initial_words_set)
 
@@ -291,22 +287,22 @@ def solve(file_name):
 			population = evolve(population, fitness_arr)
 			if best_fitness == 0:
 				if len(words) == population[0].words_num:
+					best_crossword.output_solution(file_name)
 					return len(words), abs(sum(fitness_arr)) / len(fitness_arr)
 				new_word = copy.deepcopy(words[index])
 				population = create_new_population(best_crossword, new_word)
 				index += 1
 
 
-# TODO Make class for Crossword
 if __name__ == "__main__":
 	words_arr = []
 	loss_arr = []
 	time_arr = []
 
 	total_t = time.time()
-	for file in os.listdir("sh_inputs"):
+	for file in os.listdir(META.input_path):
 		timer = time.time()
-		words, loss = solve(f"sh_inputs/{file}")
+		words, loss = solve(file)
 		timer = time.time() - timer
 
 		loss_arr.append(loss)
