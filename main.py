@@ -1,9 +1,11 @@
 import copy
-import os
 import random
 from enum import Enum
-import matplotlib.pyplot as plt
+
+import os
+
 import time
+import json
 
 
 class Orientation(Enum):
@@ -13,48 +15,63 @@ class Orientation(Enum):
 
 
 class META:
-	grid_size = 20
+	"""
+	Class containing coefficients for EA,
+	meta values, paths to input/output directories.
+	"""
 	mutation_per = 0.3
-	crossover_per = 0.6 / 2
+	crossover_per = 0.6
 	old_best_per = 0.1
 
-	generations = 80
+	grid_size = 20
+	generations = 100
 	population_size = 500
 
 	basic_score = 0
 	penalty = 1
 
 	output_path = "outputs"
-	input_path = "inputs"
+	input_path = "7-15 inputs"
+	log_path = "logs"
 
 
 class Word:
 	def __init__(self, string: str):
 		self.string = string
 		self.length = len(self.string)
-		self.intersections: dict = {}
+		self.intersections: dict = {}  # Key - location, Value - Word
 
 		self.orientation: Orientation = Orientation.NotUsed
-		self.position: tuple = None
+		self.start: tuple = None
 		self.end: tuple = None
-		self.visited: bool = False
+		self.visited: bool = False  # Required for DFS run
 
-	def __lt__(self, other) -> bool:
+	def __lt__(self, other: 'Word') -> bool:
 		return self.length > other.length
 
-	def overlap(self, other) -> bool:
-		par_1, par_2 = (1, 0) if self.orientation == Orientation.Vertical else (0, 1)
+	def overlap(self, other: 'Word') -> bool:
+		"""
+		Check whether words with similar orientation overlap or not
+		:param other: Word
+		:return: Bool value
+		"""
+		# Define which axis is main for checkout
+		sec_axis, main_axis = (1, 0) if self.orientation == Orientation.Vertical else (0, 1)
 
-		if (self.position[par_1] <= other.position[par_1] <= self.end[par_1]
-				or self.position[par_1] <= other.end[par_1] <= self.end[par_1]):
-			if self.position[par_2] == other.position[par_2]:
-				return True
-		return False
+		return self.start[main_axis] == other.start[main_axis] and (
+				self.start[sec_axis] <= other.start[sec_axis] <= self.end[sec_axis]
+				or self.start[sec_axis] <= other.end[sec_axis] <= self.end[sec_axis]
+		)
 
-	def are_intersect(self, other) -> bool | tuple[int]:
-		x1, y1 = self.position
+	def are_intersect(self, other: 'Word') -> bool | tuple[int]:
+		"""
+		Finds point of intersection of two orthogonal words, if it exists.
+		:param other: word.
+		:return:Point of intersection or bool value of its absence.
+		"""
+		x1, y1 = self.start
 		x2, y2 = self.end
-		x3, y3 = other.position
+		x3, y3 = other.start
 		x4, y4 = other.end
 		# For Lines with One Horizontal and One Vertical
 		if (x1 == x2 and y3 == y4) or (y1 == y2 and x3 == x4):
@@ -67,6 +84,10 @@ class Word:
 		return False
 
 	def random_position(self):
+		"""
+		Randomly chooses the word orientation and position,
+		taking into consideration word's length.
+		"""
 		self.orientation = random.choice([Orientation.Horizontal, Orientation.Vertical])
 		if self.orientation == Orientation.Horizontal:
 			x = random.randint(0, META.grid_size - self.length)
@@ -78,8 +99,9 @@ class Word:
 			y = random.randint(0, META.grid_size - self.length)
 			x_ = x
 			y_ = y + self.length - 1
-		self.position = (x, y)
+		self.start = (x, y)
 		self.end = (x_, y_)
+		return self
 
 
 class Crossword:
@@ -88,82 +110,102 @@ class Crossword:
 		self.words_num = len(self.words)
 
 	def dfs(self, word: Word):
+		"""
+		Standard recursive DFS algorithm
+		:param word: Start word
+		"""
 		word.visited = True
 		for word_ in word.intersections.values():
 			if not word_.visited:
 				self.dfs(word_)
 
 	def fitness(self) -> int:
+		"""
+		Measure how fit an individual(crossword) is.
+		:return: Crossword score
+		"""
 		crossword = copy.deepcopy(self.words)
-		score = META.basic_score
-		for word in crossword:
-			for word_ in crossword:
-				if word_.string == word.string:
+		score = META.basic_score  # score == 0
+		# Compare all words with each other
+		for word_1 in crossword:
+			for word_2 in crossword:
+				if word_2.string == word_1.string:
 					continue
 
-				if word_.orientation == word.orientation:
-					par_1, par_2 = (1, 0) if word.orientation == Orientation.Vertical else (0, 1)
+				if word_2.orientation == word_1.orientation:
+					par_1, par_2 = (1, 0) if word_1.orientation == Orientation.Vertical else (0, 1)
 
-					if word.overlap(word_):
+					if word_1.overlap(word_2):
 						score -= META.penalty
-					elif word_.position[par_2] in (word.position[par_2] + 1, word.position[par_2] - 1):
-						if (word.position[par_1] <= word_.position[par_1] < word.end[par_1]
-								or word.position[par_1] < word_.end[par_1] <= word.end[par_1]):
+					elif word_2.start[par_2] in (word_1.start[par_2] + 1, word_1.start[par_2] - 1):
+						if (word_1.start[par_1] <= word_2.start[par_1] < word_1.end[par_1]
+								or word_1.start[par_1] < word_2.end[par_1] <= word_1.end[par_1]):
 							score -= META.penalty
-					elif word_.position[par_2] == word.position[par_2]:
-						if word_.end[par_1] == word.position[par_1] - 1 or word_.position[par_1] == word.end[par_1] + 1:
+					elif word_2.start[par_2] == word_1.start[par_2]:
+						if word_2.end[par_1] == word_1.start[par_1] - 1 or word_2.start[par_1] == word_1.end[par_1] + 1:
 							score -= META.penalty
 				else:
-					intersect = word.are_intersect(word_)
-					vert_w = word if word.orientation == Orientation.Vertical else word_
-					horiz_w = word_ if word.orientation == Orientation.Vertical else word
+					intersect = word_1.are_intersect(word_2)
+					vert_w = word_1 if word_1.orientation == Orientation.Vertical else word_2
+					horiz_w = word_2 if word_1.orientation == Orientation.Vertical else word_1
 
 					if intersect:
-						if (vert_w.string[intersect[1] - vert_w.position[1]]
-								!= horiz_w.string[intersect[0] - horiz_w.position[0]]):
+						if (vert_w.string[intersect[1] - vert_w.start[1]]
+								!= horiz_w.string[intersect[0] - horiz_w.start[0]]):
 							score -= META.penalty
 						else:
-							word.intersections[intersect] = word_
+							word_1.intersections[intersect] = word_2
 					else:
-						if vert_w.position[0] in (horiz_w.position[0] - 1, horiz_w.end[0] + 1):
-							if vert_w.position[1] <= horiz_w.position[1] <= vert_w.end[1]:
+						if vert_w.start[0] in (horiz_w.start[0] - 1, horiz_w.end[0] + 1):
+							if vert_w.start[1] <= horiz_w.start[1] <= vert_w.end[1]:
 								score -= META.penalty
-						elif horiz_w.position[1] in (vert_w.position[1] - 1, vert_w.end[1] + 1):
-							if horiz_w.position[0] <= vert_w.position[0] <= horiz_w.end[0]:
+						elif horiz_w.start[1] in (vert_w.start[1] - 1, vert_w.end[1] + 1):
+							if horiz_w.start[0] <= vert_w.start[0] <= horiz_w.end[0]:
 								score -= META.penalty
 
 		# Check the case of parallel neighbour words, for first and last symbols in the words
-		for word in crossword:
-			for word_ in crossword:
-				if word_.string == word.string or word_.orientation != word.orientation:
+		for word_1 in crossword:
+			for word_2 in crossword:
+				if word_2.string == word_1.string or word_2.orientation != word_1.orientation:
 					continue
 
-				par_1, par_2 = (1, 0) if word.orientation == Orientation.Vertical else (0, 1)
+				par_1, par_2 = (1, 0) if word_1.orientation == Orientation.Vertical else (0, 1)
 
-				if word_.position[par_2] in (word.position[par_2] + 1, word.position[par_2] - 1):
-					if word_.position[par_1] == word.end[par_1]:
-						if not word.intersections.get(word.end) or not word_.intersections.get(word_.position):
+				if word_2.start[par_2] in (word_1.start[par_2] + 1, word_1.start[par_2] - 1):
+					if word_2.start[par_1] == word_1.end[par_1]:
+						if not word_1.intersections.get(word_1.end) or not word_2.intersections.get(word_2.start):
 							score -= META.penalty
-					elif word.position[par_1] == word_.end[par_1]:
-						if not word.intersections.get(word.position) or not word_.intersections.get(word_.end):
+					elif word_1.start[par_1] == word_2.end[par_1]:
+						if not word_1.intersections.get(word_1.start) or not word_2.intersections.get(word_2.end):
 							score -= META.penalty
 
+		# Checks consistency of the crossword using DFS
 		for i in range(self.words_num):
 			self.dfs(crossword[i])
-			for word in crossword:
-				if not word.visited or len(word.intersections) == 0:
+			for word_1 in crossword:
+				if not word_1.visited or len(word_1.intersections) == 0:
 					score -= META.penalty
 				else:
-					word.visited = False
+					word_1.visited = False
 		return score
 
 	def mutation(self):
+		"""
+		Randomly mutates one word in crossword.
+		"""
 		individual = copy.deepcopy(self.words)
 		rand_gen = random.choice(individual)
 		rand_gen.random_position()
 		return Crossword(individual)
 
-	def crossover(self, parent2) -> tuple[Word]:
+	def crossover(self, parent2: 'Crossword') -> tuple[Word]:
+		"""
+		Cross genes of two parent using one point or two point strategy.
+		If the total amount of words < 3, perform one point crossover.
+		:param parent2: Crossword
+		:return: Two offsprings(crosswords)
+		"""
+
 		def two_points():
 			point1, point2 = sorted(random.sample(range(0, len(self.words) - 1), 2))
 			offspring1 = Crossword(self.words[:point1] + parent2.words[point1:point2] + self.words[point2:])
@@ -179,11 +221,14 @@ class Crossword:
 		return two_points() if self.words_num > 2 else one_point()
 
 	def print(self):
+		"""
+		Print the crossword into console
+		"""
 		grid = []
 		for _ in range(META.grid_size):
 			grid.append(['-' for _ in range(META.grid_size)])
 		for word in self.words:
-			x, y = word.position
+			x, y = word.start
 			for i in range(word.length):
 				if word.orientation == Orientation.Horizontal:
 					grid[y][x + i] = word.string[i]
@@ -196,17 +241,38 @@ class Crossword:
 		print("+" + "-" * (META.grid_size * 3 - 1) + "+")
 
 	def insert_word(self, word: Word):
+		"""
+		Insert new word into crossword
+		:param word: New word
+		"""
 		self.words.append(word)
 		self.words_num += 1
 
-	def output_solution(self, file_name):
-		with open(f"{META.output_path}/{file_name}", "w") as file:
-			for word in self.words:
-				file.write(f"{word.position[0]} {word.position[1]} {word.orientation.value}\n")
+	def to_output(self) -> str:
+		"""
+		Prepare the output to the file.
+		:return: String for the output file.
+		"""
+		out_string = ""
+		for word in self.words:
+			out_string += f"{word.start[0]} {word.start[1]} {word.orientation.value[0]}\n"
+		return out_string
 
 
 def best_old_individuals(population: list[Crossword], fitness_arr: list[int]) -> list[Crossword]:
+	"""
+	Return best 30% individuals of the population.
+	:param population: Population of crosswords.
+	:param fitness_arr: Fitness fo each crossword.
+	:return: List of the best crosswords.
+	"""
+
 	def get_max_indices(arr):
+		"""
+		Finds best fitness values.
+		:param arr: Fitness array.
+		:return: Array of indexes of the best fitness values.
+		"""
 		n = round(len(population) * 0.3)
 		sorted_indices = sorted(range(len(arr)), key=lambda k: arr[k])
 		max_indices = sorted_indices[-n:][::-1]
@@ -214,113 +280,169 @@ def best_old_individuals(population: list[Crossword], fitness_arr: list[int]) ->
 
 	pop = copy.deepcopy(population)
 	fit_arr = copy.deepcopy(fitness_arr)
-	best_ind = [pop[i] for i in get_max_indices(fit_arr)]
-	return best_ind
+	return [pop[i] for i in get_max_indices(fit_arr)]
 
 
 def evolve(population: list[Crossword], fitness_arr: list[int]) -> list[Crossword]:
-	best_old = best_old_individuals(population, fitness_arr)
+	"""
+	Evolve the population.
+	:param population: Current population.
+	:param fitness_arr: Fitness values of current population.
+	:return: New population
+	"""
+	# Choose the best individual of current population
+	best_old_individual = best_old_individuals(population, fitness_arr)
+	# Take certain percentage of the best individual to the next generation.
 	n = round(len(population) * META.old_best_per)
+	new_generation = copy.deepcopy(best_old_individual[:n])
 
-	new_population = copy.deepcopy(best_old[:n])
+	# Cross the genes among the best individuals randomly
+	for _ in range(round((len(population) * META.crossover_per) / 2)):
+		offspring1, offspring2 = random.choice(best_old_individual).crossover(random.choice(best_old_individual))
+		new_generation.append(offspring1)
+		new_generation.append(offspring2)
 
-	for _ in range(round((len(population) * META.crossover_per))):
-		offspring1, offspring2 = random.choice(best_old).crossover(random.choice(best_old))
-		new_population.append(offspring1)
-		new_population.append(offspring2)
-
+	# Randomly mutate individuals of current generation
 	for _ in range(round(len(population) * META.mutation_per)):
 		kek = random.choice(population)
-		new_population.append(kek.mutation())
+		new_generation.append(kek.mutation())
 
-	for cr in new_population:
-		if not isinstance(cr, Crossword):
-			print(0)
-
-	return new_population
+	return new_generation
 
 
-def best_fit_crossword(population: list[Crossword], fitness_arr: list[int]) -> tuple[Crossword, int]:
+def best_fit_crossword(population: list[Crossword], fitness_arr: list[int]) -> tuple[[list[Crossword], int]]:
+	"""
+	Find the best individual out of the population.
+	:param population: Current generation.
+	:param fitness_arr: Fitness values of each individual of current crossword.
+	:return: Best
+	"""
 	fit_arr = copy.deepcopy(fitness_arr)
+	completed_crosswords = [population[i] for i in range(len(fit_arr)) if fit_arr[i] == 0]
 	ind = fit_arr.index(max(fit_arr))
-	return population[ind], fit_arr[ind]
+
+	if fit_arr[ind] == 0:
+		return completed_crosswords, 0
+	else:
+		return [population[ind]], fit_arr[ind]
 
 
-def init_zero_population(input_words: Crossword) -> list[Crossword]:
+def init_zero_population(input_words: list[str]) -> list[Crossword]:
+	"""
+	Initialize zero population.
+	:param input_words: Set of given words.
+	:return: Initial population.
+	"""
 	zero_population = []
 	for _ in range(META.population_size):
-		words = copy.deepcopy(input_words)
+		words = [Word(w) for w in input_words]
 		for word in words:
 			word.random_position()
 		zero_population.append(Crossword(words=words))
 	return zero_population
 
 
-def create_new_population(best_crossword: Crossword, new_word: Word):
-	population = []
-	for _ in range(META.population_size):
-		crossword = copy.deepcopy(best_crossword)
-		word = copy.deepcopy(new_word)
-		word.random_position()
-		crossword.insert_word(word)
-		population.append(crossword)
-	return population
+def create_new_population(best_crossword: list[Crossword], new_word: str):
+	"""
+	Create new population of completed crossword with new word.
+	:param best_crossword: Completed crossword with fewer words.
+	:param new_word: Word to add to the crossword.
+	:return: New population, with increased number of words.
+	"""
+	new_population = []
+	for cross in best_crossword:
+		for _ in range(META.population_size//len(best_crossword)):
+			crossword = copy.deepcopy(cross)
+			word = Word(new_word).random_position()
+			crossword.insert_word(word)
+			new_population.append(crossword)
+	return new_population
 
 
-def read_file(file_name) -> Crossword:
-	with open(f"{META.input_path}/{file_name}", "r") as file:
-		return [Word(word.strip()) for word in file.readlines()]
+def output_solution(file_name, out_string):
+	"""
+	Prints the final result to the output
+	:param file_name:
+	:param out_string:
+	"""
+	with open(f"{META.output_path}/{file_name}", "w") as file:
+		file.write(out_string)
+
+
+def read_file(file_name) -> list[Word]:
+	with open(f"{META.input_path}/{file_name}", "r") as input_file:
+		words = [word.strip() for word in input_file.readlines()]
+		words.sort(key=lambda x: len(x))
+		return words[::-1]
 
 
 def solve(file_name):
-	words = sorted(read_file(file_name))
-	print("Words:", len(words), end=" ")
-
-	while True:
-		index = 2
-		initial_words_set = copy.deepcopy(words[:index])
+	"""
+	Construct the crossword using EA algorithm.
+	:param file_name: Input file
+	:return: Bool
+	"""
+	words = read_file(file_name)  # Sorting words by its length(Long >> Short)
+	print("Words:", len(words), end=" ")  # TODO remove
+	# Try to construct the crossword with several attempts
+	attempts = 0
+	while attempts != 10:
+		# Start constructing the crossword out of two words.
+		used_words = 2
+		initial_words_set = copy.copy(words[:used_words])
 		population = init_zero_population(initial_words_set)
 
 		for generation in range(META.generations):
 			fitness_arr = [individual.fitness() for individual in population]
-			best_crossword, best_fitness = best_fit_crossword(population, fitness_arr)
+			best_crosswords, best_fitness = best_fit_crossword(population, fitness_arr)
 			population = evolve(population, fitness_arr)
-			if best_fitness == 0:
+			if best_fitness == 0:  # If the best crossword is valid.
+				# Checks whether we used all given words or not.
 				if len(words) == population[0].words_num:
-					best_crossword.output_solution(file_name)
-					return len(words), abs(sum(fitness_arr)) / len(fitness_arr)
-				new_word = copy.deepcopy(words[index])
-				population = create_new_population(best_crossword, new_word)
-				index += 1
+					output_solution(file_name, best_crosswords[0].to_output())
+					return {
+						"Average final fitness": abs(sum(fitness_arr)) / len(fitness_arr),
+						"Max fitness": min(fitness_arr),
+						"Words": len(words),
+						"Solutions": len(best_crosswords)
+					}
+				# Creates new population out of the valid crossword and next word
+				population = create_new_population(best_crosswords, words[used_words])
+				used_words += 1
+		attempts += 1
+	print("Fail", end=" ")
+	output_solution(file_name, "Fail")
+	return False
 
 
+def log(data, test_num, time):
+	data["Time (sec)"] = time
+	with open(f"{META.log_path}/{test_num}.json", "w") as log_file:
+		json.dump(data, log_file, indent=2)
+	return data
+
+
+def print_time(time_in_sec, total):
+	sec = str(int(time_in_sec) % 60)
+	if len(sec) == 1:
+		sec = "0" + sec
+
+	if total:
+		print("Total time:", end=" ")
+	else:
+		print(f"Time:", end=" ")
+	print(f"{int(time_in_sec // 60)}:{sec}")
+
+
+# TODO Stat
+# TODO remove libs
 if __name__ == "__main__":
-	words_arr = []
-	loss_arr = []
-	time_arr = []
-
 	total_t = time.time()
 	for file in os.listdir(META.input_path):
 		timer = time.time()
-		words, loss = solve(file)
+		data = solve(file)
 		timer = time.time() - timer
-
-		loss_arr.append(loss)
-		words_arr.append(words)
-		time_arr.append(timer)
-
-		sec = str(int(timer) % 60)
-		if len(sec) == 1:
-			sec = "0" + sec
-		print(f"Time: {int(timer // 60)}:{sec}")
-	print("Total time: ", time.time() - total_t)
-
-	plt.ylabel('Avr Loss')
-	plt.xlabel('Words')
-	plt.scatter(words_arr, loss_arr)
-	plt.show()
-
-	plt.ylabel('Time in sec')
-	plt.xlabel('Words')
-	plt.scatter(words_arr, time_arr)
-	plt.show()
+		if data:
+			log(data, file.split(".")[0], timer)
+		print_time(timer, False)
+	print_time(time.time() - total_t, True)
