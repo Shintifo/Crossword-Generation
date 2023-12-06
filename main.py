@@ -1,11 +1,7 @@
 import copy
 import random
 from enum import Enum
-
 import os
-
-import time
-import json
 
 
 class Orientation(Enum):
@@ -407,38 +403,6 @@ def solve(file_name):
 	print("Fail")
 	output_solution(file_name)
 	return False
-
-
-# def log(data, test_num, time):
-# 	data["Time (sec)"] = time
-# 	with open(f"{META.log_path}/{test_num}.json", "w") as log_file:
-# 		json.dump(data, log_file, indent=2)
-# 	return data
-#
-#
-# def print_time(time_in_sec, total):
-# 	sec = str(int(time_in_sec) % 60)
-# 	if len(sec) == 1:
-# 		sec = "0" + sec
-# 	if total:
-# 		print("Total time:", end=" ")
-# 	else:
-# 		print(f"Time:", end=" ")
-# 	print(f"{int(time_in_sec // 60)}:{sec}")
-# #
-#
-# # TODO remove libs
-# if __name__ == "__main__":
-# 	total_t = time.time()
-# 	for file in sorted(os.listdir(META.input_path)):
-# 		timer = time.time()
-# 		data = solve(file)
-# 		timer = time.time() - timer
-# 		if data:
-# 			log(data, file.split(".")[0], timer)
-# 		print_time(timer, False)
-# 	print_time(time.time() - total_t, True)
-
 
 if __name__ == "__main__":
 	for file in sorted(os.listdir(META.input_path)):
