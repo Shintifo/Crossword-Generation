@@ -31,8 +31,7 @@ class META:
 	penalty = 1
 
 	output_path = "outputs"
-	input_path = "7-15 inputs"
-	log_path = "logs"
+	input_path = "inputs"
 
 
 class Word:
@@ -48,6 +47,9 @@ class Word:
 
 	def __lt__(self, other: 'Word') -> bool:
 		return self.length > other.length
+
+	def __eq__(self, other):
+		return self.string == other.string
 
 	def overlap(self, other: 'Word') -> bool:
 		"""
@@ -193,10 +195,10 @@ class Crossword:
 		"""
 		Randomly mutates one word in crossword.
 		"""
-		individual = copy.deepcopy(self.words)
-		rand_gen = random.choice(individual)
+		new_word_set = copy.deepcopy(self.words)
+		rand_gen = random.choice(new_word_set)
 		rand_gen.random_position()
-		return Crossword(individual)
+		return Crossword(new_word_set)
 
 	def crossover(self, parent2: 'Crossword') -> tuple[Word]:
 		"""
@@ -273,7 +275,7 @@ def best_old_individuals(population: list[Crossword], fitness_arr: list[int]) ->
 		:param arr: Fitness array.
 		:return: Array of indexes of the best fitness values.
 		"""
-		n = round(len(population) * 0.3)
+		n = round(len(pop) * 0.3)
 		sorted_indices = sorted(range(len(arr)), key=lambda k: arr[k])
 		max_indices = sorted_indices[-n:][::-1]
 		return max_indices
@@ -304,27 +306,23 @@ def evolve(population: list[Crossword], fitness_arr: list[int]) -> list[Crosswor
 
 	# Randomly mutate individuals of current generation
 	for _ in range(round(len(population) * META.mutation_per)):
-		kek = random.choice(population)
-		new_generation.append(kek.mutation())
+		new_generation.append(random.choice(population).mutation())
 
 	return new_generation
 
 
-def best_fit_crossword(population: list[Crossword], fitness_arr: list[int]) -> tuple[[list[Crossword], int]]:
+def best_fit_crossword(population: list[Crossword], fitness_arr: list[int]) -> list[Crossword]:
 	"""
 	Find the best individual out of the population.
 	:param population: Current generation.
 	:param fitness_arr: Fitness values of each individual of current crossword.
 	:return: Best
 	"""
-	fit_arr = copy.deepcopy(fitness_arr)
-	completed_crosswords = [population[i] for i in range(len(fit_arr)) if fit_arr[i] == 0]
-	ind = fit_arr.index(max(fit_arr))
+	return [population[i] for i in range(len(fitness_arr)) if fitness_arr[i] == 0]
 
-	if fit_arr[ind] == 0:
-		return completed_crosswords, 0
-	else:
-		return [population[ind]], fit_arr[ind]
+
+def has_completed_crossword(fit_arr: list[int]) -> bool:
+	return fit_arr.index(max(fit_arr)) == 0
 
 
 def init_zero_population(input_words: list[str]) -> list[Crossword]:
@@ -351,7 +349,7 @@ def create_new_population(best_crossword: list[Crossword], new_word: str):
 	"""
 	new_population = []
 	for cross in best_crossword:
-		for _ in range(META.population_size//len(best_crossword)):
+		for _ in range(META.population_size // len(best_crossword)):
 			crossword = copy.deepcopy(cross)
 			word = Word(new_word).random_position()
 			crossword.insert_word(word)
@@ -359,21 +357,22 @@ def create_new_population(best_crossword: list[Crossword], new_word: str):
 	return new_population
 
 
-def output_solution(file_name, out_string):
-	"""
-	Prints the final result to the output
-	:param file_name:
-	:param out_string:
-	"""
+def output_solution(file_name, crossword: Crossword = None, words_order=None):
 	with open(f"{META.output_path}/{file_name}", "w") as file:
-		file.write(out_string)
+		if crossword is None:
+			file.write("Fail\n")
+		else:
+			for word in words_order:
+				cr_word = crossword.words[(crossword.words.index(word))]
+				file.write(f"{cr_word.start[0]} {cr_word.start[1]} {cr_word.orientation.value[0]}\n")
 
 
-def read_file(file_name) -> list[Word]:
+def read_file(file_name) -> tuple[list[str], list[str]]:
 	with open(f"{META.input_path}/{file_name}", "r") as input_file:
 		words = [word.strip() for word in input_file.readlines()]
+		input_order_words = copy.copy(words)
 		words.sort(key=lambda x: len(x))
-		return words[::-1]
+		return input_order_words, words[::-1]
 
 
 def solve(file_name):
@@ -382,8 +381,7 @@ def solve(file_name):
 	:param file_name: Input file
 	:return: Bool
 	"""
-	words = read_file(file_name)  # Sorting words by its length(Long >> Short)
-	print("Words:", len(words), end=" ")  # TODO remove
+	input_order_words, words = read_file(file_name)  # Sorting words by its length(Long >> Short)
 	# Try to construct the crossword with several attempts
 	attempts = 0
 	while attempts != 10:
@@ -394,55 +392,54 @@ def solve(file_name):
 
 		for generation in range(META.generations):
 			fitness_arr = [individual.fitness() for individual in population]
-			best_crosswords, best_fitness = best_fit_crossword(population, fitness_arr)
-			population = evolve(population, fitness_arr)
-			if best_fitness == 0:  # If the best crossword is valid.
+			if has_completed_crossword(fitness_arr):
+				completed_crosswords = best_fit_crossword(population, fitness_arr)
 				# Checks whether we used all given words or not.
 				if len(words) == population[0].words_num:
-					output_solution(file_name, best_crosswords[0].to_output())
-					return {
-						"Average final fitness": abs(sum(fitness_arr)) / len(fitness_arr),
-						"Max fitness": min(fitness_arr),
-						"Words": len(words),
-						"Solutions": len(best_crosswords)
-					}
+					output_solution(file_name, completed_crosswords[0], input_order_words)
+					completed_crosswords[0].print()
+					return True
 				# Creates new population out of the valid crossword and next word
-				population = create_new_population(best_crosswords, words[used_words])
+				population = create_new_population(completed_crosswords, words[used_words])
 				used_words += 1
+			population = evolve(population, fitness_arr)
 		attempts += 1
-	print("Fail", end=" ")
-	output_solution(file_name, "Fail")
+	print("Fail")
+	output_solution(file_name)
 	return False
 
 
-def log(data, test_num, time):
-	data["Time (sec)"] = time
-	with open(f"{META.log_path}/{test_num}.json", "w") as log_file:
-		json.dump(data, log_file, indent=2)
-	return data
+# def log(data, test_num, time):
+# 	data["Time (sec)"] = time
+# 	with open(f"{META.log_path}/{test_num}.json", "w") as log_file:
+# 		json.dump(data, log_file, indent=2)
+# 	return data
+#
+#
+# def print_time(time_in_sec, total):
+# 	sec = str(int(time_in_sec) % 60)
+# 	if len(sec) == 1:
+# 		sec = "0" + sec
+# 	if total:
+# 		print("Total time:", end=" ")
+# 	else:
+# 		print(f"Time:", end=" ")
+# 	print(f"{int(time_in_sec // 60)}:{sec}")
+# #
+#
+# # TODO remove libs
+# if __name__ == "__main__":
+# 	total_t = time.time()
+# 	for file in sorted(os.listdir(META.input_path)):
+# 		timer = time.time()
+# 		data = solve(file)
+# 		timer = time.time() - timer
+# 		if data:
+# 			log(data, file.split(".")[0], timer)
+# 		print_time(timer, False)
+# 	print_time(time.time() - total_t, True)
 
 
-def print_time(time_in_sec, total):
-	sec = str(int(time_in_sec) % 60)
-	if len(sec) == 1:
-		sec = "0" + sec
-
-	if total:
-		print("Total time:", end=" ")
-	else:
-		print(f"Time:", end=" ")
-	print(f"{int(time_in_sec // 60)}:{sec}")
-
-
-# TODO Stat
-# TODO remove libs
 if __name__ == "__main__":
-	total_t = time.time()
-	for file in os.listdir(META.input_path):
-		timer = time.time()
-		data = solve(file)
-		timer = time.time() - timer
-		if data:
-			log(data, file.split(".")[0], timer)
-		print_time(timer, False)
-	print_time(time.time() - total_t, True)
+	for file in sorted(os.listdir(META.input_path)):
+		solve(file)
