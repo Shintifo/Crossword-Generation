@@ -28,7 +28,7 @@ class META:
 	penalty = 1
 
 	output_path = "outputs"
-	input_path = "7-13 inputs"
+	input_path = "inputs"
 
 
 class Word:
@@ -308,17 +308,22 @@ def evolve(population: list[Crossword], fitness_arr: list[int]) -> list[Crosswor
 	return new_generation
 
 
-def best_fit_crossword(population: list[Crossword], fitness_arr: list[int]) -> list[Crossword]:
+def completed_crosswords(population: list[Crossword], fitness_arr: list[int]) -> list[Crossword]:
 	"""
-	Find the best individual out of the population.
+	Find the correct crosswords out of the population.
 	:param population: Current generation.
 	:param fitness_arr: Fitness values of each individual of current crossword.
-	:return: Best
+	:return: Crosswords that has fitness score 0
 	"""
 	return [population[i] for i in range(len(fitness_arr)) if fitness_arr[i] == 0]
 
 
 def has_completed_crossword(fit_arr: list[int]) -> bool:
+	"""
+	Checks whether population has at least one crossword with fitness score 0 or not
+	:param fit_arr: Fitness scores of population
+	:return: Bool value
+	"""
 	return fit_arr[fit_arr.index(max(fit_arr))] == 0
 
 
@@ -360,14 +365,14 @@ def create_new_population(best_crossword: list[Crossword], new_word: str):
 	return new_population
 
 
-def output_solution(file_name, crossword: Crossword = None, words_order=None):
-	with open(f"{META.output_path}/{file_name}", "w") as file:
+def output_solution(file_num, crossword: Crossword = None, words_order=None):
+	with open(f"{META.output_path}/output{file_num}.txt", "w") as out_file:
 		if crossword is None:
-			file.write("Fail\n")
+			out_file.write("Fail\n")
 		else:
 			for word in words_order:
 				cr_word = crossword.words[(crossword.words.index(word))]
-				file.write(f"{cr_word.start[0]} {cr_word.start[1]} {cr_word.orientation.value[0]}\n")
+				out_file.write(f"{cr_word.start[0]} {cr_word.start[1]} {cr_word.orientation.value[0]}\n")
 
 
 def read_file(file_name) -> tuple[list[str], list[str]]:
@@ -384,6 +389,8 @@ def solve(file_name):
 	:param file_name: Input file
 	:return: Bool
 	"""
+	file_num = file_name.split(".")[0][5:]
+
 	input_order_words, words = read_file(file_name)  # Sorting words by its length(Long >> Short)
 	print(f"Number of words: {len(words)}")
 	# Try to construct the crossword with several attempts
@@ -398,10 +405,10 @@ def solve(file_name):
 			population = evolve(population, fitness_arr)
 			fitness_arr = [individual.fitness() for individual in population]
 			if has_completed_crossword(fitness_arr):
-				completed_crosswords = best_fit_crossword(population, fitness_arr)
+				completed_crosswords = completed_crosswords(population, fitness_arr)
 				# Checks whether we used all given words or not.
 				if len(words) == population[0].words_num:
-					output_solution(file_name, completed_crosswords[0], input_order_words)
+					output_solution(file_num, completed_crosswords[0], input_order_words)
 					print("Successfully!")
 					completed_crosswords[0].print()
 					return True
@@ -411,7 +418,7 @@ def solve(file_name):
 
 		attempts += 1
 	print("Fail")
-	output_solution(file_name)
+	output_solution(file_num)
 	return False
 
 
