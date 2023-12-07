@@ -372,7 +372,7 @@ def output_solution(file_num, crossword: Crossword = None, words_order=None):
 		else:
 			for word in words_order:
 				cr_word = crossword.words[(crossword.words.index(word))]
-				out_file.write(f"{cr_word.start[0]} {cr_word.start[1]} {cr_word.orientation.value[0]}\n")
+				out_file.write(f"{cr_word.start[1]} {cr_word.start[0]} {cr_word.orientation.value[0]}\n")
 
 
 def read_file(file_name) -> tuple[list[str], list[str]]:
