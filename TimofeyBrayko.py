@@ -1,5 +1,6 @@
 import copy
 import random
+import time
 from enum import Enum
 import os
 
@@ -27,7 +28,7 @@ class META:
 	penalty = 1
 
 	output_path = "outputs"
-	input_path = "inputs"
+	input_path = "7-13 inputs"
 
 
 class Word:
@@ -44,8 +45,8 @@ class Word:
 	def __lt__(self, other: 'Word') -> bool:
 		return self.length > other.length
 
-	def __eq__(self, other):
-		return self.string == other.string
+	def __eq__(self, other: str):
+		return self.string == other
 
 	def overlap(self, other: 'Word') -> bool:
 		"""
@@ -318,7 +319,7 @@ def best_fit_crossword(population: list[Crossword], fitness_arr: list[int]) -> l
 
 
 def has_completed_crossword(fit_arr: list[int]) -> bool:
-	return fit_arr.index(max(fit_arr)) == 0
+	return fit_arr[fit_arr.index(max(fit_arr))] == 0
 
 
 def init_zero_population(input_words: list[str]) -> list[Crossword]:
@@ -350,6 +351,12 @@ def create_new_population(best_crossword: list[Crossword], new_word: str):
 			word = Word(new_word).random_position()
 			crossword.insert_word(word)
 			new_population.append(crossword)
+	for i in range(META.population_size - len(new_population)):
+		crossword = copy.deepcopy(random.choice(best_crossword))
+		word = Word(new_word).random_position()
+		crossword.insert_word(word)
+		new_population.append(crossword)
+
 	return new_population
 
 
@@ -378,6 +385,7 @@ def solve(file_name):
 	:return: Bool
 	"""
 	input_order_words, words = read_file(file_name)  # Sorting words by its length(Long >> Short)
+	print(f"Number of words: {len(words)}")
 	# Try to construct the crossword with several attempts
 	attempts = 0
 	while attempts != 10:
@@ -385,25 +393,37 @@ def solve(file_name):
 		used_words = 2
 		initial_words_set = copy.copy(words[:used_words])
 		population = init_zero_population(initial_words_set)
-
+		fitness_arr = [individual.fitness() for individual in population]
 		for generation in range(META.generations):
+			population = evolve(population, fitness_arr)
 			fitness_arr = [individual.fitness() for individual in population]
 			if has_completed_crossword(fitness_arr):
 				completed_crosswords = best_fit_crossword(population, fitness_arr)
 				# Checks whether we used all given words or not.
 				if len(words) == population[0].words_num:
 					output_solution(file_name, completed_crosswords[0], input_order_words)
+					print("Successfully!")
 					completed_crosswords[0].print()
 					return True
 				# Creates new population out of the valid crossword and next word
 				population = create_new_population(completed_crosswords, words[used_words])
 				used_words += 1
-			population = evolve(population, fitness_arr)
+
 		attempts += 1
 	print("Fail")
 	output_solution(file_name)
 	return False
 
+
+def print_time(time_in_sec):
+	sec = str(int(time_in_sec) % 60)
+	if len(sec) == 1:
+		sec = "0" + sec
+	print(f"Time: {int(time_in_sec // 60)}:{sec}", end="\n\n\n")
+
+
 if __name__ == "__main__":
-	for file in sorted(os.listdir(META.input_path)):
+	for file in os.listdir(META.input_path):
+		timer = time.time()
 		solve(file)
+		print_time(time.time() - timer)
