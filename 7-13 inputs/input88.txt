@@ -1,0 +1,9 @@
+strong
+interests
+institute
+signature
+structure
+organisation
+illustration
+installations
+instructional

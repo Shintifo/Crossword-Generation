@@ -1,0 +1,10 @@
+coverage
+heritage
+countries
+portraits
+forecasts
+automatic
+annotated
+journalists
+generations
+corporations

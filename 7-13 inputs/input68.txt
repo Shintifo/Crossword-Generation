@@ -1,0 +1,7 @@
+door
+star
+score
+shorts
+startup
+shadows
+shareholders

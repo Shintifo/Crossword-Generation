@@ -1,0 +1,8 @@
+accept
+skiing
+refine
+reject
+penalty
+oriented
+triangle
+scientists

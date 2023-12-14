@@ -1,3 +1,4 @@
+import copy
 import os
 import random
 import shutil
@@ -5,7 +6,7 @@ import string
 import matplotlib.pyplot as plt
 import numpy as np
 
-from main import solve
+from TimofeyBrayko import solve
 
 
 def generate_random_word(length):
@@ -102,6 +103,20 @@ def build():
 	ax.boxplot(a, vert=True, showmeans=False, meanline=False,
 			   labels=('5', '10'))
 	plt.show()
+
+
+def sort_test():
+	lox = ["a", "aaboba", "kur", "zadvdzavdvAvdv"]
+	lox.sort(key=lambda x: len(x))
+	print(lox[::-1])
+
+
+def copy_test():
+	lox = ["a", "aaboba", "kur", "zadvdzavdvAvdv"]
+	a = copy.copy(lox)
+	a[0] = "b"
+	print(lox)
+	print(a)
 
 
 # TODO change cases in inputs

@@ -1,0 +1,11 @@
+norm
+volume
+scheme
+corpus
+soldier
+species
+succeed
+forward
+concrete
+restricted
+documented
