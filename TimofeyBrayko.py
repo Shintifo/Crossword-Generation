@@ -405,15 +405,15 @@ def solve(file_name):
 			population = evolve(population, fitness_arr)
 			fitness_arr = [individual.fitness() for individual in population]
 			if has_completed_crossword(fitness_arr):
-				completed_crosswords = completed_crosswords(population, fitness_arr)
+				completed_cross = completed_crosswords(population, fitness_arr)
 				# Checks whether we used all given words or not.
 				if len(words) == population[0].words_num:
-					output_solution(file_num, completed_crosswords[0], input_order_words)
+					output_solution(file_num, completed_cross[0], input_order_words)
 					print("Successfully!")
-					completed_crosswords[0].print()
+					completed_cross[0].print()
 					return True
 				# Creates new population out of the valid crossword and next word
-				population = create_new_population(completed_crosswords, words[used_words])
+				population = create_new_population(completed_cross, words[used_words])
 				used_words += 1
 
 		attempts += 1
